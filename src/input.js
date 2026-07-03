@@ -12,6 +12,7 @@ function updateMouse(input, canvas, event) {
 }
 
 export function createInput(canvas) {
+  const jumpHeld = new Set();
   const input = {
     left: false,
     right: false,
@@ -24,12 +25,17 @@ export function createInput(canvas) {
   window.addEventListener("keydown", (event) => {
     if (LEFT_KEYS.has(event.code)) input.left = true;
     if (RIGHT_KEYS.has(event.code)) input.right = true;
-    if (JUMP_KEYS.has(event.code)) input.jumpPressed = true;
+
+    if (JUMP_KEYS.has(event.code) && !jumpHeld.has(event.code)) {
+      if (jumpHeld.size === 0) input.jumpPressed = true;
+      jumpHeld.add(event.code);
+    }
   });
 
   window.addEventListener("keyup", (event) => {
     if (LEFT_KEYS.has(event.code)) input.left = false;
     if (RIGHT_KEYS.has(event.code)) input.right = false;
+    if (JUMP_KEYS.has(event.code)) jumpHeld.delete(event.code);
   });
 
   canvas.addEventListener("pointermove", (event) => updateMouse(input, canvas, event));
