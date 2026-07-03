@@ -16,24 +16,24 @@ export const PLAYER = {
 export const SHOTGUN = {
   magazineSize: 8,
   reloadSeconds: 1.35,
-  cooldownSeconds: 0.22,
-  pelletCount: 8,
+  cooldownSeconds: 0.24,
+  pelletCount: 6,
   pelletSpeed: 1040,
   pelletLife: 0.34,
   pelletRadius: 5,
-  spreadRadians: 0.34,
-  recoil: 230,
-  downwardRecoil: 980,
+  spreadRadians: 0.3,
+  recoil: 190,
+  downwardRecoil: 640,
   stockRange: 96,
-  stockArcSeconds: 0.18,
-  stockCooldownSeconds: 0.45,
+  stockArcSeconds: 0.24,
+  stockCooldownSeconds: 0.5,
 };
 
 export const ENEMY_TYPES = {
-  normal: { label: "Normal", width: 42, height: 70, health: 24, speed: 92, damage: 12, score: 10 },
-  fast: { label: "Fast", width: 38, height: 64, health: 16, speed: 156, damage: 10, score: 15 },
-  fat: { label: "Fat", width: 58, height: 82, health: 58, speed: 62, damage: 18, score: 25 },
-  tankBoss: { label: "Tank Boss", width: 128, height: 150, health: 520, speed: 42, damage: 25, score: 300 },
+  normal: { label: "普通僵尸", width: 42, height: 70, health: 32, speed: 68, damage: 12, score: 10 },
+  fast: { label: "快跑僵尸", width: 38, height: 64, health: 20, speed: 124, damage: 10, score: 15 },
+  fat: { label: "胖僵尸", width: 58, height: 82, health: 68, speed: 52, damage: 18, score: 25 },
+  tankBoss: { label: "巨型肉盾 Boss", width: 128, height: 150, health: 560, speed: 34, damage: 25, score: 300 },
 };
 
 export const LEVELS = [
@@ -43,9 +43,9 @@ export const LEVELS = [
 ];
 
 export const POWER_UPS = {
-  piercing: { label: "Piercing Shot", duration: 10 },
-  wide: { label: "Wide Spread", duration: 10 },
-  fastReload: { label: "Fast Reload", duration: 10 },
-  strongRecoil: { label: "Strong Recoil", duration: 10 },
-  longStock: { label: "Long Stock", duration: 10 },
+  piercing: { label: "穿透弹", duration: 10 },
+  wide: { label: "大扩散", duration: 10 },
+  fastReload: { label: "快速换弹", duration: 10 },
+  strongRecoil: { label: "强后坐力", duration: 10 },
+  longStock: { label: "长枪托", duration: 10 },
 };

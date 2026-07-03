@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { ENEMY_TYPES, POWER_UPS, SHOTGUN } from "../src/core/constants.js";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
 import {
   applyStockHits,
@@ -46,14 +47,14 @@ test("shouldSpawnExtraction only allows cleared level mode states", () => {
   assert.equal(shouldSpawnExtraction({ mode: "endless", enemiesRemaining: 0, bossAlive: false }), false);
 });
 
-test("fireShotgun spends one shell and creates eight pellets", () => {
+test("fireShotgun spends one shell and creates six pellets", () => {
   const state = createGameState("level");
 
   const fired = fireShotgun(state, { x: 1, y: 0 });
 
   assert.equal(fired, true);
   assert.equal(state.player.ammo, 7);
-  assert.equal(state.pellets.length, 8);
+  assert.equal(state.pellets.length, 6);
 });
 
 test("wide power-up makes the shotgun spread wider", () => {
@@ -109,8 +110,12 @@ test("piercing power-up lets a pellet hit two enemies once", () => {
     piercesRemaining: 1,
     hitEnemyIds: [],
   });
-  state.enemies.push(createEnemy("fast", 244, state.player.y));
-  state.enemies.push(createEnemy("fast", 250, state.player.y));
+  const firstEnemy = createEnemy("fast", 244, state.player.y);
+  const secondEnemy = createEnemy("fast", 250, state.player.y);
+  firstEnemy.health = 10;
+  secondEnemy.health = 10;
+  state.enemies.push(firstEnemy);
+  state.enemies.push(secondEnemy);
 
   applyPelletHits(state);
 
@@ -256,4 +261,29 @@ test("endless spawning never exceeds the enemy cap when near full", () => {
   assert.ok(state.enemies.length <= 18);
   assert.equal(state.wave, 9);
   assert.ok(state.spawnTimer > 0);
+});
+
+test("V2 uses fewer shotgun pellets and Chinese power-up labels", () => {
+  assert.equal(SHOTGUN.pelletCount, 6);
+  assert.equal(POWER_UPS.piercing.label, "穿透弹");
+  assert.equal(POWER_UPS.wide.label, "大扩散");
+  assert.equal(POWER_UPS.fastReload.label, "快速换弹");
+  assert.equal(POWER_UPS.strongRecoil.label, "强后坐力");
+  assert.equal(POWER_UPS.longStock.label, "长枪托");
+});
+
+test("V2 slows zombies while increasing normal zombie health", () => {
+  assert.ok(ENEMY_TYPES.normal.speed <= 70);
+  assert.ok(ENEMY_TYPES.normal.health >= 30);
+  assert.ok(ENEMY_TYPES.fast.speed <= 130);
+  assert.ok(ENEMY_TYPES.fat.health >= 66);
+});
+
+test("new game state includes corpses floating texts and next-level flow flags", () => {
+  const state = createGameState("level");
+
+  assert.deepEqual(state.corpses, []);
+  assert.deepEqual(state.floatTexts, []);
+  assert.equal(state.awaitingNextLevel, false);
+  assert.equal(state.pendingBoss, false);
 });

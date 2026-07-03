@@ -35,11 +35,17 @@ export function createGameState(mode = "level") {
     pellets: [],
     pickups: [],
     effects: [],
+    corpses: [],
+    floatTexts: [],
     activePowerUps: {},
     extraction: { active: false, x: WORLD.width - 220, y: WORLD.groundY - 90, w: 86, h: 90 },
     spawnTimer: 0,
     requiredKills: mode === "level" ? 8 : Infinity,
     bossSpawned: false,
+    awaitingNextLevel: false,
+    pendingBoss: false,
+    pendingBossType: null,
+    nextLevel: 1,
   };
 }
 
