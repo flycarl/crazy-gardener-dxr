@@ -196,6 +196,13 @@ function updateHud(state) {
   if (!hud || !state) return;
 
   const player = state.player;
+  const objective =
+    state.mode === "level"
+      ? state.extraction.active
+        ? "Extraction: ready"
+        : `Enemies: ${state.enemiesRemaining ?? state.enemies.length}`
+      : `Next wave: ${Math.ceil(state.spawnTimer)}s`;
+
   hud.innerHTML = [
     `Health: ${Math.ceil(player.health)}`,
     `Ammo: ${player.ammo}/${player.magazineSize}`,
@@ -203,6 +210,7 @@ function updateHud(state) {
     `Mode: ${state.mode}`,
     `Level: ${state.level}`,
     `Wave: ${state.wave}`,
+    objective,
     `Kills: ${state.kills}`,
     `Score: ${state.score}`,
     formatPowerUps(state.activePowerUps),

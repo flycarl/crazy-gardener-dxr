@@ -1,5 +1,5 @@
 import { createGameState } from "./core/state.js";
-import { createEnemy, updateGame } from "./core/systems.js";
+import { configureLevel, spawnLevelEnemies, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
 import { drawGame } from "./render.js";
 
@@ -24,12 +24,14 @@ function getAimDirection(currentState) {
 
 function start(mode) {
   state = createGameState(mode);
-  state.enemies.push(
-    createEnemy("normal", 620, 520),
-    createEnemy("fast", 940, 526),
-    createEnemy("fat", 1280, 508),
-    createEnemy("normal", 1680, 520),
-  );
+
+  if (mode === "level") {
+    configureLevel(state, 1);
+    spawnLevelEnemies(state);
+  } else {
+    state.spawnTimer = 0;
+  }
+
   menu.classList.add("hidden");
 }
 

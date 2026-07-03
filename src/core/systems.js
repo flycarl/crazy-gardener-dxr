@@ -1,4 +1,4 @@
-import { ENEMY_TYPES, PLAYER, POWER_UPS, SHOTGUN, WORLD } from "./constants.js";
+import { ENEMY_TYPES, LEVELS, PLAYER, POWER_UPS, SHOTGUN, WORLD } from "./constants.js";
 import { circleRectOverlap, clamp, normalize, rectsOverlap } from "./math.js";
 
 const FLOOR_FRICTION = 0.82;
@@ -6,6 +6,8 @@ const ENEMY_CONTACT_COOLDOWN = 0.75;
 const PELLET_DAMAGE = 18;
 const BOSS_STOCK_DAMAGE = 72;
 const POWER_UP_DROP_INTERVAL = 4;
+const ENDLESS_MAX_ENEMIES = 18;
+const ENDLESS_SPAWN_SECONDS = 3.2;
 let nextEnemyId = 1;
 let nextPickupId = 1;
 let nextEffectId = 1;
@@ -129,6 +131,29 @@ function updateEffects(state, dt) {
   }
 
   state.effects = state.effects.filter((effect) => effect.life > 0);
+}
+
+function getLevelPlan(level) {
+  if (level % 3 === 0) {
+    return LEVELS[2];
+  }
+
+  return LEVELS[(level - 1) % 2];
+}
+
+function getSpawnX(state, index, spacing = 190) {
+  const playerLead = state.player.x + 520 + index * spacing;
+  const rightLane = WORLD.width - 760 + index * spacing;
+
+  return clamp(Math.max(playerLead, rightLane), 420, WORLD.width - 170);
+}
+
+function spawnEnemyList(state, enemyTypes, startIndex = 0) {
+  return enemyTypes.map((type, index) => {
+    const enemy = createEnemy(type, getSpawnX(state, startIndex + index), WORLD.groundY);
+    state.enemies.push(enemy);
+    return enemy;
+  });
 }
 
 function getStockHitbox(state) {
@@ -264,9 +289,49 @@ function updateLevelBookkeeping(state) {
   state.enemiesRemaining = state.enemies.length;
   state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
 
-  if (state.mode === "level" && state.kills >= state.requiredKills && state.enemiesRemaining === 0 && !state.bossAlive) {
+  if (state.mode === "level" && !state.extraction.active && state.kills >= state.requiredKills && state.enemiesRemaining === 0 && !state.bossAlive) {
     state.extraction.active = true;
   }
+}
+
+function updateEndlessSpawns(state, dt) {
+  if (state.mode !== "endless") {
+    return;
+  }
+
+  state.extraction.active = false;
+  state.spawnTimer = Math.max(0, state.spawnTimer - dt);
+
+  if (state.spawnTimer > 0 || state.enemies.length >= ENDLESS_MAX_ENEMIES) {
+    return;
+  }
+
+  const wave = state.wave;
+  const count = Math.min(3 + Math.floor(wave / 2), 8);
+  const enemyTypes = [];
+
+  for (let index = 0; index < count; index += 1) {
+    if (wave >= 3 && index % 4 === 1) {
+      enemyTypes.push("fast");
+    } else if (wave >= 2 && index % 4 === 3) {
+      enemyTypes.push("fat");
+    } else {
+      enemyTypes.push("normal");
+    }
+  }
+
+  spawnEnemyList(state, enemyTypes);
+
+  if (wave > 0 && wave % 5 === 0 && !state.enemies.some((enemy) => enemy.isBoss)) {
+    const boss = createEnemy("tankBoss", clamp(WORLD.width - 260, 420, WORLD.width - ENEMY_TYPES.tankBoss.width), WORLD.groundY);
+    state.enemies.push(boss);
+    state.bossSpawned = true;
+  }
+
+  state.wave += 1;
+  state.enemiesRemaining = state.enemies.length;
+  state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
+  state.spawnTimer = Math.max(1.25, ENDLESS_SPAWN_SECONDS - Math.min(1.6, wave * 0.12));
 }
 
 export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
@@ -290,6 +355,58 @@ export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
     isBoss: type === "tankBoss",
     hitCooldown: 0,
   };
+}
+
+export function configureLevel(state, level) {
+  const plan = getLevelPlan(level);
+
+  state.mode = "level";
+  state.level = level;
+  state.enemies = [];
+  state.pellets = [];
+  state.pickups = [];
+  state.effects = [];
+  state.extraction.active = false;
+  state.bossSpawned = false;
+  state.bossAlive = false;
+  state.enemiesRemaining = 0;
+  state.spawnTimer = 0;
+  state.requiredKills = level % 3 === 0 ? 0 : plan.enemies.length;
+
+  return state;
+}
+
+export function spawnLevelEnemies(state) {
+  if (state.mode !== "level") {
+    return [];
+  }
+
+  const plan = getLevelPlan(state.level);
+  const spawned = spawnEnemyList(state, plan.enemies);
+
+  if (plan.boss && !state.bossSpawned) {
+    const bossTemplate = ENEMY_TYPES[plan.boss];
+    const boss = createEnemy(plan.boss, WORLD.width - bossTemplate.width - 160, WORLD.groundY);
+    state.enemies.push(boss);
+    spawned.push(boss);
+    state.bossSpawned = true;
+  }
+
+  state.enemiesRemaining = state.enemies.length;
+  state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
+
+  return spawned;
+}
+
+export function completeExtraction(state) {
+  if (state.mode !== "level" || !state.extraction.active) {
+    return false;
+  }
+
+  configureLevel(state, state.level + 1);
+  spawnLevelEnemies(state);
+
+  return true;
 }
 
 export function spawnPowerUp(state, id, x, y) {
@@ -430,6 +547,7 @@ export function updateGame(state, input, pressed, dt) {
 
   updateTimers(player, step);
   updatePowerUps(state, step);
+  updateEndlessSpawns(state, step);
   updatePlayer(state, input, pressed, step);
 
   if (pressed.shootPressed) {
@@ -445,6 +563,9 @@ export function updateGame(state, input, pressed, dt) {
   applyStockHits(state);
   updateEnemies(state, step);
   applyPickupCollisions(state);
+  if (state.extraction.active && rectsOverlap(player, state.extraction)) {
+    completeExtraction(state);
+  }
   updateEffects(state, step);
   updateLevelBookkeeping(state);
   state.cameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));

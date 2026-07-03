@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
 import {
   applyStockHits,
+  completeExtraction,
+  configureLevel,
   createEnemy,
   fireShotgun,
+  spawnLevelEnemies,
   spawnPowerUp,
   startReload,
   swingStock,
@@ -106,4 +109,65 @@ test("spawnPowerUp creates a pickup", () => {
   assert.equal(pickup.id, "piercing");
   assert.equal(pickup.x, 200);
   assert.equal(pickup.y, 300);
+});
+
+test("configureLevel prepares a boss level without required kills", () => {
+  const state = createGameState("level");
+  state.enemies.push(createEnemy("normal", 400, 520));
+  state.pellets.push({ x: 1, y: 1, vx: 0, vy: 0, life: 1, radius: 1 });
+  state.pickups.push({ id: "piercing", x: 1, y: 1, w: 26, h: 26 });
+  state.effects.push({ id: 1, x: 1, y: 1, life: 1, maxLife: 1, radius: 1 });
+  state.extraction.active = true;
+  state.bossSpawned = true;
+
+  configureLevel(state, 3);
+
+  assert.equal(state.level, 3);
+  assert.equal(state.requiredKills, 0);
+  assert.equal(state.bossSpawned, false);
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.pellets.length, 0);
+  assert.equal(state.pickups.length, 0);
+  assert.equal(state.effects.length, 0);
+  assert.equal(state.extraction.active, false);
+});
+
+test("completeExtraction advances level mode and hides extraction", () => {
+  const state = createGameState("level");
+  state.extraction.active = true;
+
+  completeExtraction(state);
+
+  assert.equal(state.level, 2);
+  assert.equal(state.extraction.active, false);
+  assert.ok(state.enemies.length > 0);
+});
+
+test("completeExtraction does not advance endless mode", () => {
+  const state = createGameState("endless");
+  state.extraction.active = true;
+
+  completeExtraction(state);
+
+  assert.equal(state.level, 1);
+  assert.equal(state.wave, 1);
+});
+
+test("spawnLevelEnemies uses current level plans including boss levels", () => {
+  const state = createGameState("level");
+
+  configureLevel(state, 2);
+  spawnLevelEnemies(state);
+
+  assert.equal(state.enemies.length, 8);
+  assert.deepEqual(
+    state.enemies.map((enemy) => enemy.type),
+    ["normal", "fast", "normal", "fat", "fast", "normal", "fat", "normal"],
+  );
+
+  configureLevel(state, 3);
+  spawnLevelEnemies(state);
+
+  assert.ok(state.enemies.some((enemy) => enemy.type === "tankBoss"));
+  assert.equal(state.bossSpawned, true);
 });

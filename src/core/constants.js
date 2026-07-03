@@ -36,6 +36,12 @@ export const ENEMY_TYPES = {
   tankBoss: { label: "Tank Boss", width: 128, height: 150, health: 520, speed: 42, damage: 25, score: 300 },
 };
 
+export const LEVELS = [
+  { enemies: ["normal", "normal", "normal", "fast", "normal", "fat"] },
+  { enemies: ["normal", "fast", "normal", "fat", "fast", "normal", "fat", "normal"] },
+  { enemies: ["normal", "fast", "fat"], boss: "tankBoss" },
+];
+
 export const POWER_UPS = {
   piercing: { label: "Piercing Shot", duration: 10 },
   wide: { label: "Wide Spread", duration: 10 },
