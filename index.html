@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Shotgun Gardener</title>
+    <link rel="stylesheet" href="src/styles.css">
+  </head>
+  <body>
+    <main class="game-shell">
+      <canvas id="game" width="1280" height="720" aria-label="Shotgun Gardener game canvas"></canvas>
+      <section id="menu" class="overlay">
+        <h1>Shotgun Gardener</h1>
+        <div class="menu-actions">
+          <button id="levelMode" type="button">Level Mode</button>
+          <button id="endlessMode" type="button">Endless Mode</button>
+        </div>
+      </section>
+      <section id="hud" class="hud" aria-live="polite"></section>
+    </main>
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
