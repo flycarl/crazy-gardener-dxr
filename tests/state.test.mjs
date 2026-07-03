@@ -287,3 +287,32 @@ test("new game state includes corpses floating texts and next-level flow flags",
   assert.equal(state.awaitingNextLevel, false);
   assert.equal(state.pendingBoss, false);
 });
+
+test("picking up a power-up creates a Chinese floating pickup message", () => {
+  const state = createGameState("level");
+  spawnPowerUp(state, "piercing", state.player.x, state.player.y);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.activePowerUps.piercing > 0, true);
+  assert.equal(state.floatTexts.some((text) => text.text === "获得：穿透弹"), true);
+});
+
+test("stock-killed non-boss enemies become flying corpses for five seconds", () => {
+  const state = createGameState("level");
+  state.enemies.push(createEnemy("normal", state.player.x + state.player.w + 18, state.player.y));
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.corpses.length, 1);
+  assert.equal(state.corpses[0].life, 5);
+  assert.ok(Math.abs(state.corpses[0].vx) > 300);
+  assert.ok(state.corpses[0].vy < 0);
+});

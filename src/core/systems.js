@@ -28,6 +28,34 @@ function makeEffect(x, y, color = "#fff8d7", life = 0.28, radius = 14, extras = 
   };
 }
 
+function addFloatText(state, text, x, y, color = "#fff8d7") {
+  state.floatTexts.push({
+    text,
+    x,
+    y,
+    vy: -38,
+    life: 1.2,
+    maxLife: 1.2,
+    color,
+  });
+}
+
+function createCorpseFromEnemy(enemy, direction) {
+  return {
+    id: `corpse-${enemy.id}`,
+    type: enemy.type,
+    x: enemy.x,
+    y: enemy.y,
+    w: enemy.w,
+    h: enemy.h,
+    vx: direction * 620,
+    vy: -520,
+    life: 5,
+    rotation: 0,
+    spin: direction * 5.5,
+  };
+}
+
 function getPlayerCenter(player) {
   return {
     x: player.x + player.w / 2,
@@ -137,6 +165,35 @@ function updateEffects(state, dt) {
   }
 
   state.effects = state.effects.filter((effect) => effect.life > 0);
+}
+
+function updateCorpses(state, dt) {
+  for (const corpse of state.corpses) {
+    corpse.vy += WORLD.gravity * dt;
+    corpse.x = clamp(corpse.x + corpse.vx * dt, 0, WORLD.width - corpse.w);
+    corpse.y += corpse.vy * dt;
+    corpse.rotation += corpse.spin * dt;
+    corpse.life -= dt;
+
+    const floorY = WORLD.groundY - corpse.h;
+    if (corpse.y >= floorY) {
+      corpse.y = floorY;
+      corpse.vy = 0;
+      corpse.vx *= 0.84;
+      corpse.spin *= 0.84;
+    }
+  }
+
+  state.corpses = state.corpses.filter((corpse) => corpse.life > 0);
+}
+
+function updateFloatTexts(state, dt) {
+  for (const floatText of state.floatTexts) {
+    floatText.y += floatText.vy * dt;
+    floatText.life -= dt;
+  }
+
+  state.floatTexts = state.floatTexts.filter((floatText) => floatText.life > 0);
 }
 
 function getLevelPlan(level) {
@@ -256,6 +313,7 @@ function applyPickupCollisions(state) {
     }
 
     state.activePowerUps[pickup.id] = POWER_UPS[pickup.id].duration;
+    addFloatText(state, `获得：${POWER_UPS[pickup.id].label}`, player.x + player.w / 2, player.y - 18, pickup.color);
     state.effects.push(makeEffect(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, pickup.color, 0.36, 24));
     return false;
   });
@@ -547,6 +605,7 @@ export function applyStockHits(state) {
       enemy.x = clamp(enemy.x + player.facing * 24, 0, WORLD.width - enemy.w);
       state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#d7263d", 0.24, 24));
     } else {
+      state.corpses.push(createCorpseFromEnemy(enemy, player.facing));
       enemy.health = 0;
       enemy.x = clamp(enemy.x + player.facing * 34, 0, WORLD.width - enemy.w);
       state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#fff8d7", 0.24, 20));
@@ -587,6 +646,8 @@ export function updateGame(state, input, pressed, dt) {
     completeExtraction(state);
   }
   updateEffects(state, step);
+  updateCorpses(state, step);
+  updateFloatTexts(state, step);
   updateLevelBookkeeping(state);
   state.cameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));
 
