@@ -14,12 +14,12 @@ let lastTime = performance.now();
 
 function getAimDirection(currentState) {
   const player = currentState.player;
-  const playerX = player.x + player.w / 2 - currentState.cameraX;
+  const playerX = player.x + player.w / 2;
   const playerY = player.y + player.h / 2;
 
   return {
-    x: input.mouse.x - playerX,
-    y: input.mouse.y - playerY,
+    x: input.mouse.worldX - playerX,
+    y: input.mouse.worldY - playerY,
   };
 }
 
@@ -79,17 +79,13 @@ function frame(now) {
   lastTime = now;
 
   if (state) {
-    const pressed = consumePressed(input);
-    const frameInput = {
-      left: input.left,
-      right: input.right,
-      jump: input.jump,
-      aim: getAimDirection(state),
-      shootPressed: pressed.shootPressed,
-      stockPressed: pressed.stockPressed,
-    };
+    input.mouse.worldX = state.cameraX + input.mouse.x;
+    input.mouse.worldY = input.mouse.y;
+    input.aim = getAimDirection(state);
 
-    updateGame(state, frameInput, dt);
+    const pressed = consumePressed(input);
+
+    updateGame(state, input, pressed, dt);
     hud.innerHTML = `<span>Mode: ${state.mode}</span><span>Ammo: ${state.player.ammo}/${state.player.magazineSize}</span>`;
   }
 

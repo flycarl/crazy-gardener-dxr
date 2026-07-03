@@ -35,7 +35,7 @@ function updateTimers(player, dt) {
   }
 }
 
-function updatePlayer(state, input, dt) {
+function updatePlayer(state, input, pressed, dt) {
   const player = state.player;
   const horizontal = Number(Boolean(input.right)) - Number(Boolean(input.left));
 
@@ -47,7 +47,7 @@ function updatePlayer(state, input, dt) {
     if (Math.abs(player.vx) < 1) player.vx = 0;
   }
 
-  if (input.jump && player.onGround) {
+  if (pressed.jumpPressed && player.onGround) {
     player.vy = PLAYER.jumpVelocity;
     player.onGround = false;
   }
@@ -85,9 +85,7 @@ function updatePellets(state, dt) {
   );
 }
 
-export function startReload(state) {
-  const player = state.player;
-
+export function startReload(player) {
   if (player.reloading || player.ammo >= player.magazineSize) {
     return false;
   }
@@ -106,7 +104,7 @@ export function fireShotgun(state, aim) {
   }
 
   if (player.ammo <= 0) {
-    startReload(state);
+    startReload(player);
     return false;
   }
 
@@ -139,7 +137,7 @@ export function fireShotgun(state, aim) {
   }
 
   if (player.ammo === 0) {
-    startReload(state);
+    startReload(player);
   }
 
   return true;
@@ -158,7 +156,7 @@ export function swingStock(state) {
   return true;
 }
 
-export function updateGame(state, input, dt) {
+export function updateGame(state, input, pressed, dt) {
   if (!state || state.status !== "playing") {
     return state;
   }
@@ -167,13 +165,13 @@ export function updateGame(state, input, dt) {
   const player = state.player;
 
   updateTimers(player, step);
-  updatePlayer(state, input, step);
+  updatePlayer(state, input, pressed, step);
 
-  if (input.shootPressed) {
+  if (pressed.shootPressed) {
     fireShotgun(state, input.aim);
   }
 
-  if (input.stockPressed) {
+  if (pressed.stockPressed) {
     swingStock(state);
   }
 

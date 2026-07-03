@@ -15,22 +15,21 @@ export function createInput(canvas) {
   const input = {
     left: false,
     right: false,
-    jump: false,
-    mouse: { x: canvas.width / 2, y: canvas.height / 2 },
+    jumpPressed: false,
     shootPressed: false,
     stockPressed: false,
+    mouse: { x: canvas.width / 2, y: canvas.height / 2, worldX: canvas.width / 2, worldY: canvas.height / 2 },
   };
 
   window.addEventListener("keydown", (event) => {
     if (LEFT_KEYS.has(event.code)) input.left = true;
     if (RIGHT_KEYS.has(event.code)) input.right = true;
-    if (JUMP_KEYS.has(event.code)) input.jump = true;
+    if (JUMP_KEYS.has(event.code)) input.jumpPressed = true;
   });
 
   window.addEventListener("keyup", (event) => {
     if (LEFT_KEYS.has(event.code)) input.left = false;
     if (RIGHT_KEYS.has(event.code)) input.right = false;
-    if (JUMP_KEYS.has(event.code)) input.jump = false;
   });
 
   canvas.addEventListener("pointermove", (event) => updateMouse(input, canvas, event));
@@ -47,10 +46,12 @@ export function createInput(canvas) {
 
 export function consumePressed(input) {
   const pressed = {
+    jumpPressed: input.jumpPressed,
     shootPressed: input.shootPressed,
     stockPressed: input.stockPressed,
   };
 
+  input.jumpPressed = false;
   input.shootPressed = false;
   input.stockPressed = false;
 

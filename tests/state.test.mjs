@@ -48,7 +48,7 @@ test("startReload begins reload timer when ammo is empty", () => {
   const state = createGameState("level");
   state.player.ammo = 0;
 
-  const started = startReload(state);
+  const started = startReload(state.player);
 
   assert.equal(started, true);
   assert.equal(state.player.reloading, true);
