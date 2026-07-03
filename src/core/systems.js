@@ -302,7 +302,7 @@ function updateEndlessSpawns(state, dt) {
   state.extraction.active = false;
   state.spawnTimer = Math.max(0, state.spawnTimer - dt);
 
-  if (state.spawnTimer > 0 || state.enemies.length >= ENDLESS_MAX_ENEMIES) {
+  if (state.spawnTimer > 0) {
     return;
   }
 
@@ -320,9 +320,11 @@ function updateEndlessSpawns(state, dt) {
     }
   }
 
-  spawnEnemyList(state, enemyTypes);
+  let remainingCapacity = Math.max(0, ENDLESS_MAX_ENEMIES - state.enemies.length);
+  spawnEnemyList(state, enemyTypes.slice(0, remainingCapacity));
+  remainingCapacity = Math.max(0, ENDLESS_MAX_ENEMIES - state.enemies.length);
 
-  if (wave > 0 && wave % 5 === 0 && !state.enemies.some((enemy) => enemy.isBoss)) {
+  if (remainingCapacity > 0 && wave > 0 && wave % 5 === 0 && !state.enemies.some((enemy) => enemy.isBoss)) {
     const boss = createEnemy("tankBoss", clamp(WORLD.width - 260, 420, WORLD.width - ENEMY_TYPES.tankBoss.width), WORLD.groundY);
     state.enemies.push(boss);
     state.bossSpawned = true;

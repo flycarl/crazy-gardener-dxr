@@ -11,6 +11,7 @@ import {
   spawnPowerUp,
   startReload,
   swingStock,
+  updateGame,
 } from "../src/core/systems.js";
 
 test("player starts with eight shotgun shells", () => {
@@ -170,4 +171,25 @@ test("spawnLevelEnemies uses current level plans including boss levels", () => {
 
   assert.ok(state.enemies.some((enemy) => enemy.type === "tankBoss"));
   assert.equal(state.bossSpawned, true);
+});
+
+test("endless spawning never exceeds the enemy cap when near full", () => {
+  const state = createGameState("endless");
+  state.wave = 8;
+  state.spawnTimer = 0;
+
+  for (let index = 0; index < 17; index += 1) {
+    state.enemies.push(createEnemy("normal", 900 + index * 12, 520));
+  }
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(state.enemies.length <= 18);
+  assert.equal(state.wave, 9);
+  assert.ok(state.spawnTimer > 0);
 });
