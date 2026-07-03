@@ -704,7 +704,8 @@ export function updateGame(state, input, pressed, dt) {
   updateCorpses(state, step);
   updateFloatTexts(state, step);
   updateLevelBookkeeping(state);
-  state.cameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));
+  const targetCameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));
+  state.cameraX += (targetCameraX - state.cameraX) * Math.min(1, step * 8);
 
   return state;
 }

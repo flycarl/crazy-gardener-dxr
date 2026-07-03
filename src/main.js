@@ -1,11 +1,13 @@
 import { createGameState } from "./core/state.js";
-import { configureLevel, spawnLevelEnemies, updateGame } from "./core/systems.js";
+import { advanceToNextLevel, configureLevel, spawnLevelEnemies, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
 import { drawGame } from "./render.js";
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d");
 const menu = document.querySelector("#menu");
+const nextLevelPanel = document.querySelector("#nextLevelPanel");
+const nextLevelButton = document.querySelector("#nextLevelButton");
 const input = createInput(canvas);
 
 let state = null;
@@ -33,6 +35,16 @@ function start(mode) {
   }
 
   menu.classList.add("hidden");
+  nextLevelPanel.classList.add("hidden");
+}
+
+function updateNextLevelPanel() {
+  if (!state || !state.awaitingNextLevel) {
+    nextLevelPanel.classList.add("hidden");
+    return;
+  }
+
+  nextLevelPanel.classList.remove("hidden");
 }
 
 function frame(now) {
@@ -47,6 +59,7 @@ function frame(now) {
     const pressed = consumePressed(input);
 
     updateGame(state, input, pressed, dt);
+    updateNextLevelPanel();
   }
 
   drawGame(context, canvas, state, input);
@@ -55,4 +68,10 @@ function frame(now) {
 
 document.querySelector("#levelMode").addEventListener("click", () => start("level"));
 document.querySelector("#endlessMode").addEventListener("click", () => start("endless"));
+nextLevelButton.addEventListener("click", () => {
+  if (state) {
+    advanceToNextLevel(state);
+    updateNextLevelPanel();
+  }
+});
 requestAnimationFrame(frame);

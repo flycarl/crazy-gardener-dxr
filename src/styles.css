@@ -44,6 +44,10 @@ body {
   display: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .overlay h1 {
   margin: 0;
   font-size: clamp(36px, 7vw, 84px);
@@ -107,4 +111,27 @@ button:focus-visible {
   background: rgba(0, 0, 0, 0.35);
   font-size: 14px;
   line-height: 1.2;
+}
+
+.next-level-panel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  transform: translate(-50%, -50%);
+  min-width: min(320px, calc(100vw - 32px));
+  gap: 16px;
+  justify-items: center;
+  border: 2px solid rgba(244, 211, 94, 0.9);
+  border-radius: 8px;
+  padding: 24px;
+  background: rgba(13, 25, 15, 0.88);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+  text-align: center;
+}
+
+.next-level-title {
+  color: #fff8d7;
+  font-size: 30px;
+  font-weight: 800;
 }

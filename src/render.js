@@ -179,6 +179,52 @@ function drawEnemies(context, state) {
   }
 }
 
+function drawCorpses(context, state) {
+  for (const corpse of state.corpses) {
+    const x = screenX(state, corpse.x);
+    const y = corpse.y;
+    const fade = Math.min(1, corpse.life / 0.8);
+
+    context.save();
+    context.globalAlpha = Math.max(0, fade);
+    context.translate(x + corpse.w / 2, y + corpse.h / 2);
+    context.rotate(corpse.rotation);
+    context.fillStyle = corpse.type === "fast" ? "#5d7d35" : corpse.type === "fat" ? "#7c4326" : "#3f5335";
+    context.beginPath();
+    context.roundRect(-corpse.w / 2, -corpse.h / 2, corpse.w, corpse.h, 5);
+    context.fill();
+    context.strokeStyle = "rgba(255, 248, 215, 0.35)";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(-corpse.w * 0.25, -corpse.h * 0.1);
+    context.lineTo(corpse.w * 0.25, corpse.h * 0.12);
+    context.stroke();
+    context.restore();
+  }
+}
+
+function drawFloatTexts(context, state) {
+  context.save();
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = "bold 18px Arial";
+
+  for (const floatText of state.floatTexts) {
+    const progress = Math.max(0, floatText.life / floatText.maxLife);
+    const x = screenX(state, floatText.x);
+
+    context.globalAlpha = progress;
+    context.lineWidth = 4;
+    context.strokeStyle = "rgba(0, 0, 0, 0.58)";
+    context.strokeText(floatText.text, x, floatText.y);
+    context.fillStyle = floatText.color;
+    context.fillText(floatText.text, x, floatText.y);
+  }
+
+  context.restore();
+  context.globalAlpha = 1;
+}
+
 function drawStockArc(context, state) {
   const player = state.player;
   if (player.stockTimer <= 0) return;
@@ -186,14 +232,16 @@ function drawStockArc(context, state) {
   const centerX = screenX(state, player.x + player.w / 2);
   const centerY = player.y + player.h / 2;
   const range = SHOTGUN.stockRange + (state.activePowerUps.longStock > 0 ? 42 : 0);
-  const start = player.facing >= 0 ? -0.75 : Math.PI - 0.75;
-  const end = player.facing >= 0 ? 0.75 : Math.PI + 0.75;
+  const progress = 1 - player.stockTimer / SHOTGUN.stockArcSeconds;
+  const sweep = 1.7 * Math.max(0.12, progress);
+  const start = player.facing >= 0 ? -1.25 : Math.PI + 1.25;
+  const end = player.facing >= 0 ? start + sweep : start - sweep;
 
   context.strokeStyle = "rgba(255, 248, 215, 0.8)";
   context.lineWidth = 12;
   context.lineCap = "round";
   context.beginPath();
-  context.arc(centerX, centerY, range, start, end);
+  context.arc(centerX, centerY, range, start, end, player.facing < 0);
   context.stroke();
   context.lineCap = "butt";
 }
@@ -204,7 +252,14 @@ function drawPlayer(context, state, input) {
   const y = player.y;
   const centerX = x + player.w / 2;
   const centerY = y + player.h / 2;
-  const aim = normalize((input?.mouse?.worldX ?? player.x + player.facing) - (player.x + player.w / 2), (input?.mouse?.worldY ?? centerY) - (player.y + player.h / 2));
+  const baseAim = normalize((input?.mouse?.worldX ?? player.x + player.facing) - (player.x + player.w / 2), (input?.mouse?.worldY ?? centerY) - (player.y + player.h / 2));
+  let aim = baseAim;
+
+  if (player.stockTimer > 0) {
+    const progress = 1 - player.stockTimer / SHOTGUN.stockArcSeconds;
+    const angle = player.facing >= 0 ? -1.15 + progress * 1.75 : Math.PI + 1.15 - progress * 1.75;
+    aim = { x: Math.cos(angle), y: Math.sin(angle) };
+  }
 
   context.fillStyle = "#fff8d7";
   context.beginPath();
@@ -242,52 +297,71 @@ function drawPlayer(context, state, input) {
     context.font = "bold 13px Arial";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("RELOAD", centerX, y - 20);
+    context.fillText("换弹", centerX, y - 20);
   }
 }
 
 function formatPowerUps(activePowerUps) {
   const entries = Object.entries(activePowerUps);
-  if (entries.length === 0) return "Power-ups: none";
+  if (entries.length === 0) return "强化：无";
 
-  return `Power-ups: ${entries
+  return `强化：${entries
     .map(([id, time]) => `${POWER_UPS[id]?.label ?? id} ${Math.ceil(time)}s`)
     .join(", ")}`;
 }
 
+function drawBossBar(context, canvas, state) {
+  const boss = state.enemies.find((enemy) => enemy.isBoss);
+  if (!boss) return;
+
+  const ratio = Math.max(0, boss.health / boss.maxHealth);
+  const x = canvas.width / 2 - 260;
+  const y = 48;
+
+  context.fillStyle = "rgba(0, 0, 0, 0.58)";
+  context.beginPath();
+  context.roundRect(x, y, 520, 34, 7);
+  context.fill();
+  context.fillStyle = "#d7263d";
+  context.beginPath();
+  context.roundRect(x + 5, y + 7, 510 * ratio, 20, 5);
+  context.fill();
+  context.strokeStyle = "rgba(255, 248, 215, 0.72)";
+  context.lineWidth = 2;
+  context.strokeRect(x + 5, y + 7, 510, 20);
+  context.fillStyle = "#fff8d7";
+  context.font = "bold 16px Arial";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(`${boss.label}  ${Math.ceil(boss.health)}/${boss.maxHealth}`, canvas.width / 2, y + 17);
+}
+
 function updateHud(state) {
   const hud = document.querySelector("#hud");
-  if (!hud || !state) return;
+  if (!hud) return;
+  if (!state) {
+    hud.innerHTML = "";
+    return;
+  }
 
   const player = state.player;
-  const boss = state.enemies.find((enemy) => enemy.isBoss);
-  const objective =
-    state.mode === "level"
-      ? state.extraction.active
-        ? "Extraction: ready"
-        : `Enemies: ${state.enemiesRemaining ?? state.enemies.length}`
-      : `Next wave: ${Math.ceil(state.spawnTimer)}s`;
-
   const items = [
-    `Health: ${Math.ceil(player.health)}`,
-    `Ammo: ${player.ammo}/${player.magazineSize}`,
-    player.reloading ? `Reloading ${player.reloadTimer.toFixed(1)}s` : "Reload: ready",
-    `Mode: ${state.mode}`,
-    `Level: ${state.level}`,
-    `Wave: ${state.wave}`,
-    objective,
-    `Kills: ${state.kills}`,
-    `Score: ${state.score}`,
+    `生命：${Math.ceil(player.health)}`,
+    `弹药：${player.ammo}/${player.magazineSize}`,
+    player.reloading ? `换弹中：${player.reloadTimer.toFixed(1)}秒` : "换弹：准备就绪",
+    state.mode === "level" ? "模式：关卡" : "模式：无尽",
+    state.mode === "level" ? `第 ${state.level} 关` : `第 ${state.wave} 波`,
+    `击杀：${state.kills}`,
+    `分数：${state.score}`,
     formatPowerUps(state.activePowerUps),
-    "A/D move",
-    "Space jump",
-    "Mouse aim",
-    "Left click shoot",
-    "Right click stock swing",
+    "A/D 移动",
+    "空格跳跃",
+    "左键开枪",
+    "右键挥枪托",
   ];
 
-  if (boss) {
-    items.splice(7, 0, `Boss: ${Math.ceil(boss.health)}/${boss.maxHealth}`);
+  if (state.mode === "level") {
+    items.splice(5, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余怪物：${state.enemiesRemaining ?? state.enemies.length}`);
   }
 
   hud.innerHTML = items
@@ -308,8 +382,11 @@ export function drawGame(context, canvas, state, input) {
   drawPickups(context, state);
   drawPellets(context, state);
   drawEffects(context, state);
+  drawCorpses(context, state);
   drawEnemies(context, state);
   drawStockArc(context, state);
   drawPlayer(context, state, input);
+  drawFloatTexts(context, state);
+  drawBossBar(context, canvas, state);
   updateHud(state);
 }
