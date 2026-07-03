@@ -9,6 +9,7 @@ import {
   configureLevel,
   createEnemy,
   fireShotgun,
+  advanceToNextLevel,
   spawnLevelEnemies,
   spawnPowerUp,
   startReload,
@@ -223,7 +224,7 @@ test("completeExtraction does not advance endless mode", () => {
   assert.equal(state.wave, 1);
 });
 
-test("spawnLevelEnemies uses current level plans including boss levels", () => {
+test("spawnLevelEnemies uses current level plans and marks boss levels as pending", () => {
   const state = createGameState("level");
 
   configureLevel(state, 2);
@@ -238,8 +239,13 @@ test("spawnLevelEnemies uses current level plans including boss levels", () => {
   configureLevel(state, 3);
   spawnLevelEnemies(state);
 
-  assert.ok(state.enemies.some((enemy) => enemy.type === "tankBoss"));
-  assert.equal(state.bossSpawned, true);
+  assert.deepEqual(
+    state.enemies.map((enemy) => enemy.type),
+    ["normal", "fast", "fat"],
+  );
+  assert.equal(state.pendingBoss, true);
+  assert.equal(state.pendingBossType, "tankBoss");
+  assert.equal(state.bossSpawned, false);
 });
 
 test("endless spawning never exceeds the enemy cap when near full", () => {
@@ -315,4 +321,59 @@ test("stock-killed non-boss enemies become flying corpses for five seconds", () 
   assert.equal(state.corpses[0].life, 5);
   assert.ok(Math.abs(state.corpses[0].vx) > 300);
   assert.ok(state.corpses[0].vy < 0);
+});
+
+test("clearing a normal level waits for next-level confirmation instead of instantly extracting", () => {
+  const state = createGameState("level");
+  configureLevel(state, 1);
+  state.requiredKills = 1;
+  state.kills = 1;
+  state.enemies = [];
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.awaitingNextLevel, true);
+  assert.equal(state.extraction.active, false);
+});
+
+test("advanceToNextLevel returns player to spawn and starts the next level", () => {
+  const state = createGameState("level");
+  state.awaitingNextLevel = true;
+  state.nextLevel = 2;
+  state.player.x = 900;
+  state.player.ammo = 0;
+
+  advanceToNextLevel(state);
+
+  assert.equal(state.level, 2);
+  assert.equal(state.player.x, 170);
+  assert.equal(state.player.ammo, state.player.magazineSize);
+  assert.equal(state.awaitingNextLevel, false);
+  assert.ok(state.enemies.length > 0);
+});
+
+test("boss levels spawn the boss only after pre-boss enemies are cleared", () => {
+  const state = createGameState("level");
+  configureLevel(state, 3);
+  spawnLevelEnemies(state);
+
+  assert.equal(state.enemies.some((enemy) => enemy.isBoss), false);
+
+  state.enemies = [];
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemies.some((enemy) => enemy.isBoss), true);
+  const boss = state.enemies.find((enemy) => enemy.isBoss);
+  assert.ok(Math.abs(boss.x - state.player.x) >= 500);
+  assert.ok(Math.abs(boss.x - state.player.x) <= 700);
 });
