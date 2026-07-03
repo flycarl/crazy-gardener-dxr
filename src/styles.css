@@ -14,6 +14,8 @@ body {
 
 .game-shell {
   position: relative;
+  display: grid;
+  place-items: center;
   width: 100vw;
   height: 100vh;
   background: #203522;
@@ -21,9 +23,11 @@ body {
 
 #game {
   display: block;
-  width: 100vw;
-  height: 100vh;
+  width: min(100vw, calc(100vh * 16 / 9));
+  height: min(100vh, calc(100vw * 9 / 16));
+  aspect-ratio: 16 / 9;
   cursor: crosshair;
+  background: #182018;
 }
 
 .overlay {
@@ -44,6 +48,15 @@ body {
   margin: 0;
   font-size: clamp(36px, 7vw, 84px);
   letter-spacing: 0;
+}
+
+.control-hint {
+  max-width: min(760px, calc(100vw - 32px));
+  margin: 0;
+  color: #fff8d7;
+  font-size: clamp(14px, 2vw, 18px);
+  line-height: 1.45;
+  opacity: 0.88;
 }
 
 .menu-actions {
@@ -68,7 +81,11 @@ button {
 button:hover,
 button:focus-visible {
   background: #487a3e;
+}
+
+button:focus-visible {
   outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 248, 215, 0.92), 0 0 0 7px rgba(244, 211, 94, 0.72);
 }
 
 .hud {

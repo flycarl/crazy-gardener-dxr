@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
 import {
   applyStockHits,
+  applyPelletHits,
   completeExtraction,
   configureLevel,
   createEnemy,
@@ -53,6 +54,69 @@ test("fireShotgun spends one shell and creates eight pellets", () => {
   assert.equal(fired, true);
   assert.equal(state.player.ammo, 7);
   assert.equal(state.pellets.length, 8);
+});
+
+test("wide power-up makes the shotgun spread wider", () => {
+  const normalState = createGameState("level");
+  const wideState = createGameState("level");
+  wideState.activePowerUps.wide = 10;
+
+  fireShotgun(normalState, { x: 1, y: 0 });
+  fireShotgun(wideState, { x: 1, y: 0 });
+
+  const normalMaxVy = Math.max(...normalState.pellets.map((pellet) => Math.abs(pellet.vy)));
+  const wideMaxVy = Math.max(...wideState.pellets.map((pellet) => Math.abs(pellet.vy)));
+
+  assert.ok(wideMaxVy > normalMaxVy * 1.4);
+});
+
+test("fastReload power-up shortens the reload timer", () => {
+  const normalState = createGameState("level");
+  const fastState = createGameState("level");
+  normalState.player.ammo = 0;
+  fastState.player.ammo = 0;
+  fastState.activePowerUps.fastReload = 10;
+
+  startReload(normalState.player, normalState.activePowerUps);
+  startReload(fastState.player, fastState.activePowerUps);
+
+  assert.ok(fastState.player.reloadTimer < normalState.player.reloadTimer);
+});
+
+test("strongRecoil power-up boosts downward air shots higher", () => {
+  const normalState = createGameState("level");
+  const strongState = createGameState("level");
+  normalState.player.onGround = false;
+  strongState.player.onGround = false;
+  strongState.activePowerUps.strongRecoil = 10;
+
+  fireShotgun(normalState, { x: 0, y: 1 });
+  fireShotgun(strongState, { x: 0, y: 1 });
+
+  assert.ok(strongState.player.vy < normalState.player.vy);
+});
+
+test("piercing power-up lets a pellet hit two enemies once", () => {
+  const state = createGameState("level");
+  state.activePowerUps.piercing = 10;
+  state.pellets.push({
+    x: 250,
+    y: state.player.y + 20,
+    vx: 800,
+    vy: 0,
+    life: 1,
+    radius: 6,
+    piercesRemaining: 1,
+    hitEnemyIds: [],
+  });
+  state.enemies.push(createEnemy("fast", 244, state.player.y));
+  state.enemies.push(createEnemy("fast", 250, state.player.y));
+
+  applyPelletHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.kills, 2);
+  assert.equal(state.pellets.length, 0);
 });
 
 test("startReload begins reload timer when ammo is empty", () => {

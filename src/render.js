@@ -52,13 +52,22 @@ function drawExtraction(context, state) {
 
   const exit = state.extraction;
   const x = screenX(state, exit.x);
+  const pulse = 0.55 + Math.sin(performance.now() / 140) * 0.18;
 
+  context.save();
+  context.shadowColor = "#f4d35e";
+  context.shadowBlur = 24 + pulse * 16;
   context.fillStyle = "#f4d35e";
   context.fillRect(x, exit.y, exit.w, exit.h);
+  context.restore();
+
   context.fillStyle = "#344e41";
   context.fillRect(x + 16, exit.y + 18, exit.w - 32, exit.h - 18);
   context.fillStyle = "#fff8d7";
   context.fillRect(x + 27, exit.y + 34, exit.w - 54, 12);
+  context.strokeStyle = `rgba(255, 248, 215, ${pulse})`;
+  context.lineWidth = 4;
+  context.strokeRect(x - 8, exit.y - 8, exit.w + 16, exit.h + 16);
 }
 
 function drawPickups(context, state) {
@@ -83,23 +92,66 @@ function drawPickups(context, state) {
 }
 
 function drawPellets(context, state) {
-  context.fillStyle = "#fff4a3";
   for (const pellet of state.pellets) {
+    const x = screenX(state, pellet.x);
+    const y = pellet.y;
+    const previousX = screenX(state, pellet.previousX ?? pellet.x - pellet.vx * 0.018);
+    const previousY = pellet.previousY ?? pellet.y - pellet.vy * 0.018;
+
+    context.strokeStyle = "rgba(255, 244, 163, 0.55)";
+    context.lineWidth = 3;
+    context.lineCap = "round";
     context.beginPath();
-    context.arc(screenX(state, pellet.x), pellet.y, pellet.radius, 0, Math.PI * 2);
+    context.moveTo(previousX, previousY);
+    context.lineTo(x, y);
+    context.stroke();
+
+    context.fillStyle = "#fff4a3";
+    context.beginPath();
+    context.arc(x, y, pellet.radius, 0, Math.PI * 2);
     context.fill();
   }
+
+  context.lineCap = "butt";
 }
 
 function drawEffects(context, state) {
   for (const effect of state.effects) {
     const progress = effect.life / effect.maxLife;
+    const x = screenX(state, effect.x);
+
+    if (effect.kind === "muzzle") {
+      context.save();
+      context.globalAlpha = Math.max(0, progress);
+      context.translate(x, effect.y);
+      context.rotate(effect.angle ?? 0);
+      context.fillStyle = effect.color;
+      context.beginPath();
+      context.moveTo(0, 0);
+      context.lineTo(effect.radius * 1.35, -effect.radius * 0.38);
+      context.lineTo(effect.radius * 0.92, 0);
+      context.lineTo(effect.radius * 1.35, effect.radius * 0.38);
+      context.closePath();
+      context.fill();
+      context.restore();
+      continue;
+    }
+
+    if (effect.kind === "launch") {
+      context.globalAlpha = Math.max(0, progress * 0.7);
+      context.fillStyle = effect.color;
+      context.beginPath();
+      context.ellipse(x, effect.y, effect.radius * (1.4 - progress), 9 * (1.2 - progress * 0.4), 0, 0, Math.PI * 2);
+      context.fill();
+      context.globalAlpha = 1;
+      continue;
+    }
 
     context.globalAlpha = Math.max(0, progress);
     context.strokeStyle = effect.color;
     context.lineWidth = 3;
     context.beginPath();
-    context.arc(screenX(state, effect.x), effect.y, effect.radius * (1.15 - progress), 0, Math.PI * 2);
+    context.arc(x, effect.y, effect.radius * (1.15 - progress), 0, Math.PI * 2);
     context.stroke();
     context.globalAlpha = 1;
   }
@@ -180,6 +232,18 @@ function drawPlayer(context, state, input) {
   context.lineTo(centerX + aim.x * 90, centerY + 5 + aim.y * 90);
   context.stroke();
   context.lineCap = "butt";
+
+  if (player.reloading) {
+    context.fillStyle = "rgba(27, 27, 27, 0.74)";
+    context.beginPath();
+    context.roundRect(x - 12, y - 30, player.w + 24, 20, 5);
+    context.fill();
+    context.fillStyle = "#fff8d7";
+    context.font = "bold 13px Arial";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("RELOAD", centerX, y - 20);
+  }
 }
 
 function formatPowerUps(activePowerUps) {
@@ -196,6 +260,7 @@ function updateHud(state) {
   if (!hud || !state) return;
 
   const player = state.player;
+  const boss = state.enemies.find((enemy) => enemy.isBoss);
   const objective =
     state.mode === "level"
       ? state.extraction.active
@@ -203,10 +268,10 @@ function updateHud(state) {
         : `Enemies: ${state.enemiesRemaining ?? state.enemies.length}`
       : `Next wave: ${Math.ceil(state.spawnTimer)}s`;
 
-  hud.innerHTML = [
+  const items = [
     `Health: ${Math.ceil(player.health)}`,
     `Ammo: ${player.ammo}/${player.magazineSize}`,
-    `Reload: ${player.reloading ? `${player.reloadTimer.toFixed(1)}s` : "ready"}`,
+    player.reloading ? `Reloading ${player.reloadTimer.toFixed(1)}s` : "Reload: ready",
     `Mode: ${state.mode}`,
     `Level: ${state.level}`,
     `Wave: ${state.wave}`,
@@ -214,7 +279,18 @@ function updateHud(state) {
     `Kills: ${state.kills}`,
     `Score: ${state.score}`,
     formatPowerUps(state.activePowerUps),
-  ]
+    "A/D move",
+    "Space jump",
+    "Mouse aim",
+    "Left click shoot",
+    "Right click stock swing",
+  ];
+
+  if (boss) {
+    items.splice(7, 0, `Boss: ${Math.ceil(boss.health)}/${boss.maxHealth}`);
+  }
+
+  hud.innerHTML = items
     .map((item) => `<span>${item}</span>`)
     .join("");
 }

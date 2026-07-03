@@ -8,11 +8,14 @@ const BOSS_STOCK_DAMAGE = 72;
 const POWER_UP_DROP_INTERVAL = 4;
 const ENDLESS_MAX_ENEMIES = 18;
 const ENDLESS_SPAWN_SECONDS = 3.2;
+const WIDE_SPREAD_MULTIPLIER = 1.65;
+const FAST_RELOAD_MULTIPLIER = 0.58;
+const STRONG_RECOIL_MULTIPLIER = 1.45;
 let nextEnemyId = 1;
 let nextPickupId = 1;
 let nextEffectId = 1;
 
-function makeEffect(x, y, color = "#fff8d7", life = 0.28, radius = 14) {
+function makeEffect(x, y, color = "#fff8d7", life = 0.28, radius = 14, extras = {}) {
   return {
     id: nextEffectId++,
     x,
@@ -21,6 +24,7 @@ function makeEffect(x, y, color = "#fff8d7", life = 0.28, radius = 14) {
     life,
     maxLife: life,
     radius,
+    ...extras,
   };
 }
 
@@ -110,6 +114,8 @@ function updatePlayer(state, input, pressed, dt) {
 
 function updatePellets(state, dt) {
   for (const pellet of state.pellets) {
+    pellet.previousX = pellet.x;
+    pellet.previousY = pellet.y;
     pellet.x += pellet.vx * dt;
     pellet.y += pellet.vy * dt;
     pellet.life -= dt;
@@ -201,7 +207,7 @@ function updateEnemies(state, dt) {
   }
 }
 
-function applyPelletHits(state) {
+export function applyPelletHits(state) {
   const remainingPellets = [];
 
   for (const pellet of state.pellets) {
@@ -431,13 +437,13 @@ export function spawnPowerUp(state, id, x, y) {
   return pickup;
 }
 
-export function startReload(player) {
+export function startReload(player, activePowerUps = {}) {
   if (player.reloading || player.ammo >= player.magazineSize) {
     return false;
   }
 
   player.reloading = true;
-  player.reloadTimer = SHOTGUN.reloadSeconds;
+  player.reloadTimer = SHOTGUN.reloadSeconds * (activePowerUps.fastReload > 0 ? FAST_RELOAD_MULTIPLIER : 1);
 
   return true;
 }
@@ -450,21 +456,24 @@ export function fireShotgun(state, aim) {
   }
 
   if (player.ammo <= 0) {
-    startReload(player);
+    startReload(player, state.activePowerUps);
     return false;
   }
 
   const direction = normalize(aim?.x ?? player.facing, aim?.y ?? 0);
   const origin = getPlayerCenter(player);
   const denominator = Math.max(1, SHOTGUN.pelletCount - 1);
+  const spreadRadians = SHOTGUN.spreadRadians * (state.activePowerUps.wide > 0 ? WIDE_SPREAD_MULTIPLIER : 1);
 
   for (let index = 0; index < SHOTGUN.pelletCount; index += 1) {
     const spreadStep = index / denominator - 0.5;
-    const pelletDirection = rotate(direction, spreadStep * SHOTGUN.spreadRadians);
+    const pelletDirection = rotate(direction, spreadStep * spreadRadians);
 
     state.pellets.push({
       x: origin.x,
       y: origin.y,
+      previousX: origin.x,
+      previousY: origin.y,
       vx: pelletDirection.x * SHOTGUN.pelletSpeed,
       vy: pelletDirection.y * SHOTGUN.pelletSpeed,
       life: SHOTGUN.pelletLife,
@@ -479,13 +488,21 @@ export function fireShotgun(state, aim) {
   player.vx -= direction.x * SHOTGUN.recoil;
   player.vy -= direction.y * SHOTGUN.recoil;
   player.facing = direction.x < 0 ? -1 : 1;
+  state.effects.push(
+    makeEffect(origin.x + direction.x * 78, origin.y + direction.y * 78, "#fff1a8", 0.12, 26, {
+      kind: "muzzle",
+      angle: Math.atan2(direction.y, direction.x),
+    }),
+  );
 
   if (!player.onGround && direction.y > 0.45) {
-    player.vy -= SHOTGUN.downwardRecoil;
+    const recoil = SHOTGUN.downwardRecoil * (state.activePowerUps.strongRecoil > 0 ? STRONG_RECOIL_MULTIPLIER : 1);
+    player.vy -= recoil;
+    state.effects.push(makeEffect(origin.x, origin.y + player.h / 2, "#8ecae6", 0.2, 28, { kind: "launch" }));
   }
 
   if (player.ammo === 0) {
-    startReload(player);
+    startReload(player, state.activePowerUps);
   }
 
   return true;
@@ -501,6 +518,7 @@ export function swingStock(state) {
   player.stockTimer = SHOTGUN.stockArcSeconds;
   player.stockCooldown = SHOTGUN.stockCooldownSeconds;
   player.stockSwingId = (player.stockSwingId ?? 0) + 1;
+  state.effects.push(makeEffect(player.x + player.w / 2, player.y + player.h / 2, "#fff8d7", 0.16, SHOTGUN.stockRange, { kind: "stock" }));
 
   return true;
 }
