@@ -1,12 +1,11 @@
-import { WORLD } from "./core/constants.js";
 import { createGameState } from "./core/state.js";
-import { updateGame } from "./core/systems.js";
+import { createEnemy, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
+import { drawGame } from "./render.js";
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d");
 const menu = document.querySelector("#menu");
-const hud = document.querySelector("#hud");
 const input = createInput(canvas);
 
 let state = null;
@@ -23,55 +22,15 @@ function getAimDirection(currentState) {
   };
 }
 
-function drawPlaceholder(currentState) {
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#79b45d";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  context.fillStyle = "#24351f";
-  context.fillRect(0, WORLD.groundY, canvas.width, canvas.height - WORLD.groundY);
-
-  if (!currentState) {
-    context.fillStyle = "#fff8d7";
-    context.font = "28px Arial";
-    context.fillText("Choose a mode to start", 48, 80);
-    return;
-  }
-
-  const cameraX = currentState.cameraX;
-  const player = currentState.player;
-  const playerScreenX = player.x - cameraX;
-
-  context.strokeStyle = "#fff8d7";
-  context.lineWidth = 3;
-  context.beginPath();
-  context.moveTo(player.x + player.w / 2 - cameraX, player.y + player.h / 2);
-  context.lineTo(input.mouse.x, input.mouse.y);
-  context.stroke();
-
-  context.fillStyle = "#fff8d7";
-  context.fillRect(playerScreenX, player.y, player.w, player.h);
-  context.fillStyle = "#24351f";
-  context.fillRect(playerScreenX + (player.facing > 0 ? player.w - 12 : 4), player.y + 18, 8, 8);
-
-  context.fillStyle = "#f4d35e";
-  for (const pellet of currentState.pellets) {
-    context.beginPath();
-    context.arc(pellet.x - cameraX, pellet.y, pellet.radius, 0, Math.PI * 2);
-    context.fill();
-  }
-
-  context.fillStyle = "#fff8d7";
-  context.font = "20px Arial";
-  context.fillText(`Mode: ${currentState.mode}`, 28, 38);
-  context.fillText(`Ammo: ${player.ammo}/${player.magazineSize}${player.reloading ? " Reloading" : ""}`, 28, 66);
-  context.fillText(`Stock: ${player.stockTimer > 0 ? "active" : "ready"}`, 28, 94);
-}
-
 function start(mode) {
   state = createGameState(mode);
+  state.enemies.push(
+    createEnemy("normal", 620, 520),
+    createEnemy("fast", 940, 526),
+    createEnemy("fat", 1280, 508),
+    createEnemy("normal", 1680, 520),
+  );
   menu.classList.add("hidden");
-  hud.innerHTML = `<span>Mode: ${mode}</span><span>Ammo: ${state.player.ammo}/${state.player.magazineSize}</span>`;
 }
 
 function frame(now) {
@@ -86,10 +45,9 @@ function frame(now) {
     const pressed = consumePressed(input);
 
     updateGame(state, input, pressed, dt);
-    hud.innerHTML = `<span>Mode: ${state.mode}</span><span>Ammo: ${state.player.ammo}/${state.player.magazineSize}</span>`;
   }
 
-  drawPlaceholder(state);
+  drawGame(context, canvas, state, input);
   requestAnimationFrame(frame);
 }
 

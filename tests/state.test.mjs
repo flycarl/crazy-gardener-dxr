@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
-import { fireShotgun, startReload, swingStock } from "../src/core/systems.js";
+import {
+  applyStockHits,
+  createEnemy,
+  fireShotgun,
+  spawnPowerUp,
+  startReload,
+  swingStock,
+} from "../src/core/systems.js";
 
 test("player starts with eight shotgun shells", () => {
   const player = createPlayer();
@@ -63,4 +70,40 @@ test("swingStock opens a short active window and starts cooldown", () => {
   assert.equal(swung, true);
   assert.ok(state.player.stockTimer > 0);
   assert.ok(state.player.stockCooldown > 0);
+});
+
+test("stock swing removes a non-boss enemy and records the kill", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", state.player.x + state.player.w + 18, state.player.y);
+  state.enemies.push(enemy);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.kills, 1);
+});
+
+test("stock swing damages but does not instantly remove a boss", () => {
+  const state = createGameState("level");
+  const boss = createEnemy("tankBoss", state.player.x + state.player.w + 18, state.player.y - 74);
+  state.enemies.push(boss);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 1);
+  assert.equal(state.enemies[0].type, "tankBoss");
+  assert.ok(state.enemies[0].health > 0);
+});
+
+test("spawnPowerUp creates a pickup", () => {
+  const state = createGameState("level");
+
+  const pickup = spawnPowerUp(state, "piercing", 200, 300);
+
+  assert.equal(state.pickups.length, 1);
+  assert.equal(pickup.id, "piercing");
+  assert.equal(pickup.x, 200);
+  assert.equal(pickup.y, 300);
 });

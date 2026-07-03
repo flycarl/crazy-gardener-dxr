@@ -1,12 +1,38 @@
-import { PLAYER, SHOTGUN, WORLD } from "./constants.js";
-import { clamp, normalize } from "./math.js";
+import { ENEMY_TYPES, PLAYER, POWER_UPS, SHOTGUN, WORLD } from "./constants.js";
+import { circleRectOverlap, clamp, normalize, rectsOverlap } from "./math.js";
 
 const FLOOR_FRICTION = 0.82;
+const ENEMY_CONTACT_COOLDOWN = 0.75;
+const PELLET_DAMAGE = 18;
+const BOSS_STOCK_DAMAGE = 72;
+const POWER_UP_DROP_INTERVAL = 4;
+let nextEnemyId = 1;
+let nextPickupId = 1;
+let nextEffectId = 1;
+
+function makeEffect(x, y, color = "#fff8d7", life = 0.28, radius = 14) {
+  return {
+    id: nextEffectId++,
+    x,
+    y,
+    color,
+    life,
+    maxLife: life,
+    radius,
+  };
+}
 
 function getPlayerCenter(player) {
   return {
     x: player.x + player.w / 2,
     y: player.y + player.h / 2,
+  };
+}
+
+function getRectCenter(rect) {
+  return {
+    x: rect.x + rect.w / 2,
+    y: rect.y + rect.h / 2,
   };
 }
 
@@ -31,6 +57,18 @@ function updateTimers(player, dt) {
     if (player.reloadTimer === 0) {
       player.reloading = false;
       player.ammo = player.magazineSize;
+    }
+  }
+}
+
+function updatePowerUps(state, dt) {
+  for (const [id, time] of Object.entries(state.activePowerUps)) {
+    const nextTime = Math.max(0, time - dt);
+
+    if (nextTime === 0) {
+      delete state.activePowerUps[id];
+    } else {
+      state.activePowerUps[id] = nextTime;
     }
   }
 }
@@ -85,6 +123,195 @@ function updatePellets(state, dt) {
   );
 }
 
+function updateEffects(state, dt) {
+  for (const effect of state.effects) {
+    effect.life -= dt;
+  }
+
+  state.effects = state.effects.filter((effect) => effect.life > 0);
+}
+
+function getStockHitbox(state) {
+  const player = state.player;
+  const range = SHOTGUN.stockRange + (state.activePowerUps.longStock > 0 ? 42 : 0);
+  const height = player.h + 42;
+
+  return {
+    x: player.facing >= 0 ? player.x + player.w - 4 : player.x - range + 4,
+    y: player.y - 20,
+    w: range,
+    h: height,
+  };
+}
+
+function updateEnemies(state, dt) {
+  const player = state.player;
+  const playerCenter = getPlayerCenter(player);
+
+  for (const enemy of state.enemies) {
+    const enemyCenter = getRectCenter(enemy);
+    const direction = normalize(playerCenter.x - enemyCenter.x, playerCenter.y - enemyCenter.y);
+    enemy.hitCooldown = Math.max(0, enemy.hitCooldown - dt);
+    enemy.invulnerableTimer = Math.max(0, (enemy.invulnerableTimer ?? 0) - dt);
+    enemy.vx = direction.x * enemy.speed;
+    enemy.x = clamp(enemy.x + enemy.vx * dt, 0, WORLD.width - enemy.w);
+
+    if (enemy.y + enemy.h < WORLD.groundY) {
+      enemy.vy += WORLD.gravity * dt;
+      enemy.y += enemy.vy * dt;
+    } else {
+      enemy.y = WORLD.groundY - enemy.h;
+      enemy.vy = 0;
+    }
+
+    if (enemy.hitCooldown === 0 && rectsOverlap(player, enemy)) {
+      player.health = Math.max(0, player.health - enemy.damage);
+      enemy.hitCooldown = ENEMY_CONTACT_COOLDOWN;
+      state.effects.push(makeEffect(playerCenter.x, playerCenter.y, "#e45757", 0.22, 18));
+
+      if (player.health === 0) {
+        state.status = "gameover";
+      }
+    }
+  }
+}
+
+function applyPelletHits(state) {
+  const remainingPellets = [];
+
+  for (const pellet of state.pellets) {
+    let keepPellet = true;
+    pellet.hitEnemyIds ??= [];
+    pellet.piercesRemaining ??= state.activePowerUps.piercing > 0 ? 1 : 0;
+
+    for (const enemy of state.enemies) {
+      if (enemy.health <= 0 || pellet.hitEnemyIds.includes(enemy.id)) {
+        continue;
+      }
+
+      if (!circleRectOverlap(pellet.x, pellet.y, pellet.radius, enemy)) {
+        continue;
+      }
+
+      enemy.health -= PELLET_DAMAGE;
+      enemy.vx += Math.sign(pellet.vx || 1) * 90;
+      pellet.hitEnemyIds.push(enemy.id);
+      state.effects.push(makeEffect(pellet.x, pellet.y, enemy.isBoss ? "#f4d35e" : "#ffffff", 0.18, 10));
+
+      if (pellet.piercesRemaining > 0) {
+        pellet.piercesRemaining -= 1;
+      } else {
+        keepPellet = false;
+        pellet.life = 0;
+        break;
+      }
+    }
+
+    if (keepPellet && pellet.life > 0) {
+      remainingPellets.push(pellet);
+    }
+  }
+
+  state.pellets = remainingPellets;
+  removeDeadEnemies(state);
+}
+
+function applyPickupCollisions(state) {
+  const player = state.player;
+
+  state.pickups = state.pickups.filter((pickup) => {
+    if (!rectsOverlap(player, pickup)) {
+      return true;
+    }
+
+    state.activePowerUps[pickup.id] = POWER_UPS[pickup.id].duration;
+    state.effects.push(makeEffect(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, pickup.color, 0.36, 24));
+    return false;
+  });
+}
+
+function maybeDropPowerUp(state, enemy) {
+  if (state.kills % POWER_UP_DROP_INTERVAL !== 0) {
+    return;
+  }
+
+  const ids = Object.keys(POWER_UPS);
+  const id = ids[(state.kills / POWER_UP_DROP_INTERVAL - 1) % ids.length];
+  spawnPowerUp(state, id, enemy.x + enemy.w / 2 - 13, enemy.y + enemy.h / 2 - 13);
+}
+
+function removeDeadEnemies(state) {
+  const survivors = [];
+
+  for (const enemy of state.enemies) {
+    if (enemy.health > 0) {
+      survivors.push(enemy);
+      continue;
+    }
+
+    state.kills += 1;
+    state.score += enemy.score;
+    state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.isBoss ? "#d7263d" : "#f4d35e", 0.45, enemy.isBoss ? 44 : 24));
+    maybeDropPowerUp(state, enemy);
+  }
+
+  state.enemies = survivors;
+  state.enemiesRemaining = state.enemies.length;
+  state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
+}
+
+function updateLevelBookkeeping(state) {
+  state.enemiesRemaining = state.enemies.length;
+  state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
+
+  if (state.mode === "level" && state.kills >= state.requiredKills && state.enemiesRemaining === 0 && !state.bossAlive) {
+    state.extraction.active = true;
+  }
+}
+
+export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
+  const template = ENEMY_TYPES[type] ?? ENEMY_TYPES.normal;
+
+  return {
+    id: nextEnemyId++,
+    type,
+    label: template.label,
+    x,
+    y: Math.min(y, WORLD.groundY - template.height),
+    vx: 0,
+    vy: 0,
+    w: template.width,
+    h: template.height,
+    health: template.health,
+    maxHealth: template.health,
+    speed: template.speed,
+    damage: template.damage,
+    score: template.score,
+    isBoss: type === "tankBoss",
+    hitCooldown: 0,
+  };
+}
+
+export function spawnPowerUp(state, id, x, y) {
+  if (!POWER_UPS[id]) {
+    return null;
+  }
+
+  const pickup = {
+    uid: nextPickupId++,
+    id,
+    label: POWER_UPS[id].label,
+    x,
+    y,
+    w: 26,
+    h: 26,
+    color: id === "piercing" ? "#74d3ae" : id === "longStock" ? "#f4d35e" : "#8ecae6",
+  };
+
+  state.pickups.push(pickup);
+  return pickup;
+}
+
 export function startReload(player) {
   if (player.reloading || player.ammo >= player.magazineSize) {
     return false;
@@ -123,6 +350,8 @@ export function fireShotgun(state, aim) {
       vy: pelletDirection.y * SHOTGUN.pelletSpeed,
       life: SHOTGUN.pelletLife,
       radius: SHOTGUN.pelletRadius,
+      piercesRemaining: state.activePowerUps.piercing > 0 ? 1 : 0,
+      hitEnemyIds: [],
     });
   }
 
@@ -152,8 +381,43 @@ export function swingStock(state) {
 
   player.stockTimer = SHOTGUN.stockArcSeconds;
   player.stockCooldown = SHOTGUN.stockCooldownSeconds;
+  player.stockSwingId = (player.stockSwingId ?? 0) + 1;
 
   return true;
+}
+
+export function applyStockHits(state) {
+  const player = state.player;
+
+  if (player.stockTimer <= 0) {
+    return 0;
+  }
+
+  const hitbox = getStockHitbox(state);
+  let hits = 0;
+
+  for (const enemy of state.enemies) {
+    if (enemy.lastStockSwingId === player.stockSwingId || !rectsOverlap(hitbox, enemy)) {
+      continue;
+    }
+
+    hits += 1;
+    enemy.lastStockSwingId = player.stockSwingId;
+    enemy.vx = player.facing * 360;
+
+    if (enemy.isBoss) {
+      enemy.health = Math.max(1, enemy.health - BOSS_STOCK_DAMAGE);
+      enemy.x = clamp(enemy.x + player.facing * 24, 0, WORLD.width - enemy.w);
+      state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#d7263d", 0.24, 24));
+    } else {
+      enemy.health = 0;
+      enemy.x = clamp(enemy.x + player.facing * 34, 0, WORLD.width - enemy.w);
+      state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#fff8d7", 0.24, 20));
+    }
+  }
+
+  removeDeadEnemies(state);
+  return hits;
 }
 
 export function updateGame(state, input, pressed, dt) {
@@ -165,6 +429,7 @@ export function updateGame(state, input, pressed, dt) {
   const player = state.player;
 
   updateTimers(player, step);
+  updatePowerUps(state, step);
   updatePlayer(state, input, pressed, step);
 
   if (pressed.shootPressed) {
@@ -176,6 +441,12 @@ export function updateGame(state, input, pressed, dt) {
   }
 
   updatePellets(state, step);
+  applyPelletHits(state);
+  applyStockHits(state);
+  updateEnemies(state, step);
+  applyPickupCollisions(state);
+  updateEffects(state, step);
+  updateLevelBookkeeping(state);
   state.cameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));
 
   return state;
