@@ -13,13 +13,22 @@
         <h1>疯狂园丁</h1>
         <p class="control-hint">A/D 移动 / 空格跳跃 / 鼠标瞄准 / 左键开枪 / 右键挥枪托</p>
         <div class="menu-actions">
+          <button id="rifleToggle" type="button">步枪模式：关</button>
           <button id="levelMode" type="button">关卡模式</button>
           <button id="endlessMode" type="button">无尽模式</button>
+          <button id="balloonMode" type="button">打气球模式</button>
         </div>
       </section>
       <section id="nextLevelPanel" class="next-level-panel hidden">
         <div class="next-level-title">通关！</div>
         <button id="nextLevelButton" type="button">下一关</button>
+      </section>
+      <section id="failurePanel" class="next-level-panel hidden">
+        <div class="failure-title">失败</div>
+        <div class="failure-actions">
+          <button id="retryButton" type="button">重来</button>
+          <button id="mainMenuButton" type="button">主菜单</button>
+        </div>
       </section>
       <section id="hud" class="hud" aria-live="polite"></section>
     </main>

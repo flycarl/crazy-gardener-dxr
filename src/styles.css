@@ -130,8 +130,16 @@ button:focus-visible {
   text-align: center;
 }
 
-.next-level-title {
+.next-level-title,
+.failure-title {
   color: #fff8d7;
   font-size: 30px;
   font-weight: 800;
+}
+
+.failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
 }

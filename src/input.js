@@ -1,6 +1,10 @@
+import { SHOTGUN } from "./core/constants.js";
+
 const LEFT_KEYS = new Set(["KeyA", "ArrowLeft"]);
 const RIGHT_KEYS = new Set(["KeyD", "ArrowRight"]);
 const JUMP_KEYS = new Set(["Space", "KeyW", "ArrowUp"]);
+
+const COMBO_WINDOW_MS = SHOTGUN.doubleShotWindowSeconds * 1000;
 
 function updateMouse(input, canvas, event) {
   const rect = canvas.getBoundingClientRect();
@@ -19,6 +23,9 @@ export function createInput(canvas) {
     jumpPressed: false,
     shootPressed: false,
     stockPressed: false,
+    doubleShotPressed: false,
+    lastShootPressedAt: -Infinity,
+    lastStockPressedAt: -Infinity,
     mouse: { x: canvas.width / 2, y: canvas.height / 2, worldX: canvas.width / 2, worldY: canvas.height / 2 },
   };
 
@@ -42,8 +49,29 @@ export function createInput(canvas) {
   canvas.addEventListener("pointerdown", (event) => {
     updateMouse(input, canvas, event);
 
-    if (event.button === 0) input.shootPressed = true;
-    if (event.button === 2) input.stockPressed = true;
+    const now = performance.now();
+
+    if (event.button === 0) {
+      input.shootPressed = true;
+      input.lastShootPressedAt = now;
+
+      if (now - input.lastStockPressedAt <= COMBO_WINDOW_MS) {
+        input.doubleShotPressed = true;
+        input.shootPressed = false;
+        input.stockPressed = false;
+      }
+    }
+
+    if (event.button === 2) {
+      input.stockPressed = true;
+      input.lastStockPressedAt = now;
+
+      if (now - input.lastShootPressedAt <= COMBO_WINDOW_MS) {
+        input.doubleShotPressed = true;
+        input.shootPressed = false;
+        input.stockPressed = false;
+      }
+    }
   });
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
@@ -55,11 +83,21 @@ export function consumePressed(input) {
     jumpPressed: input.jumpPressed,
     shootPressed: input.shootPressed,
     stockPressed: input.stockPressed,
+    doubleShotPressed: input.doubleShotPressed,
   };
+
+  if (pressed.doubleShotPressed) {
+    input.lastShootPressedAt = -Infinity;
+    input.lastStockPressedAt = -Infinity;
+  } else {
+    if (pressed.shootPressed) input.lastShootPressedAt = -Infinity;
+    if (pressed.stockPressed) input.lastStockPressedAt = -Infinity;
+  }
 
   input.jumpPressed = false;
   input.shootPressed = false;
   input.stockPressed = false;
+  input.doubleShotPressed = false;
 
   return pressed;
 }

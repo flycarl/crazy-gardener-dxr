@@ -1,6 +1,8 @@
-import { PLAYER, SHOTGUN, WORLD } from "./constants.js";
+import { BALLOON_MODE, PISTOL, PLAYER, RIFLE, SHOTGUN, WORLD } from "./constants.js";
 
-export function createPlayer() {
+export function createPlayer(mode = "level", weapon = "shotgun") {
+  const activeWeapon = mode === "balloon" ? "pistol" : weapon;
+  const magazineSize = activeWeapon === "pistol" ? PISTOL.magazineSize : activeWeapon === "rifle" ? RIFLE.magazineSize : SHOTGUN.magazineSize;
   return {
     x: 170,
     y: WORLD.groundY - PLAYER.height,
@@ -8,29 +10,38 @@ export function createPlayer() {
     vy: 0,
     w: PLAYER.width,
     h: PLAYER.height,
+    maxHealth: PLAYER.maxHealth,
     health: PLAYER.maxHealth,
+    weapon: activeWeapon,
     facing: 1,
     onGround: true,
-    ammo: SHOTGUN.magazineSize,
-    magazineSize: SHOTGUN.magazineSize,
+    ammo: magazineSize,
+    magazineSize,
     reloading: false,
     reloadTimer: 0,
     shotCooldown: 0,
     stockCooldown: 0,
     stockTimer: 0,
+    queuedShots: 0,
+    queuedShotDelay: 0,
+    queuedShotAim: null,
   };
 }
 
-export function createGameState(mode = "level") {
+export function createGameState(mode = "level", weapon = "shotgun") {
+  const activeWeapon = mode === "balloon" ? "pistol" : weapon;
+
   return {
     mode,
+    weapon: activeWeapon,
     status: "playing",
     level: 1,
     wave: 1,
     score: 0,
     kills: 0,
     cameraX: 0,
-    player: createPlayer(),
+    cameraY: 0,
+    player: createPlayer(mode, activeWeapon),
     enemies: [],
     pellets: [],
     pickups: [],
@@ -40,7 +51,8 @@ export function createGameState(mode = "level") {
     activePowerUps: {},
     extraction: { active: false, x: WORLD.width - 220, y: WORLD.groundY - 90, w: 86, h: 90 },
     spawnTimer: 0,
-    requiredKills: mode === "level" ? 8 : Infinity,
+    balloonTimer: mode === "balloon" ? BALLOON_MODE.seconds : 0,
+    requiredKills: mode === "level" ? 8 : mode === "balloon" ? BALLOON_MODE.targetKills : Infinity,
     bossSpawned: false,
     awaitingNextLevel: false,
     pendingBoss: false,

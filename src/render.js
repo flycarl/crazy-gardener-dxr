@@ -10,8 +10,13 @@ function screenX(state, worldX) {
   return worldX - (state?.cameraX ?? 0);
 }
 
+function screenY(state, worldY) {
+  return worldY - (state?.cameraY ?? 0);
+}
+
 function drawBackground(context, canvas, state) {
-  const sky = context.createLinearGradient(0, 0, 0, WORLD.groundY);
+  const groundY = screenY(state, WORLD.groundY);
+  const sky = context.createLinearGradient(0, 0, 0, groundY);
   sky.addColorStop(0, SKY_TOP);
   sky.addColorStop(1, SKY_BOTTOM);
   context.fillStyle = sky;
@@ -22,27 +27,51 @@ function drawBackground(context, canvas, state) {
   context.fillStyle = "rgba(58, 92, 64, 0.22)";
   for (let x = -120 - (cameraX * 0.18) % 320; x < canvas.width + 220; x += 320) {
     context.beginPath();
-    context.moveTo(x, WORLD.groundY);
-    context.lineTo(x + 130, WORLD.groundY - 190);
-    context.lineTo(x + 280, WORLD.groundY);
+    context.moveTo(x, groundY);
+    context.lineTo(x + 130, screenY(state, WORLD.groundY - 190));
+    context.lineTo(x + 280, groundY);
     context.closePath();
     context.fill();
   }
 
   context.fillStyle = GROUND;
-  context.fillRect(0, WORLD.groundY, canvas.width, canvas.height - WORLD.groundY);
+  context.fillRect(0, groundY, canvas.width, canvas.height - groundY);
   context.fillStyle = SOIL;
-  context.fillRect(0, WORLD.groundY + 42, canvas.width, canvas.height - WORLD.groundY - 42);
+  context.fillRect(0, screenY(state, WORLD.groundY + 42), canvas.width, canvas.height - screenY(state, WORLD.groundY + 42));
+
+  for (const gap of WORLD.gaps) {
+    const x = screenX(state, gap.x);
+    context.fillStyle = SKY_BOTTOM;
+    context.fillRect(x, screenY(state, WORLD.groundY - 4), gap.w, canvas.height - screenY(state, WORLD.groundY - 4));
+    context.fillStyle = "rgba(38, 53, 31, 0.55)";
+    context.fillRect(x - 12, screenY(state, WORLD.groundY + 4), 12, canvas.height - screenY(state, WORLD.groundY));
+    context.fillRect(x + gap.w, screenY(state, WORLD.groundY + 4), 12, canvas.height - screenY(state, WORLD.groundY));
+  }
+
+  for (const platform of WORLD.platforms) {
+    const x = screenX(state, platform.x);
+    const y = screenY(state, platform.y);
+    context.fillStyle = "#a94f33";
+    context.fillRect(x, y, platform.w, platform.h);
+    context.fillStyle = "#c96543";
+    for (let tileX = x + 6; tileX < x + platform.w - 8; tileX += 34) {
+      context.fillRect(tileX, y + 4, 28, 7);
+      context.fillRect(tileX + 10, y + 14, 28, 7);
+    }
+    context.strokeStyle = "#6f3326";
+    context.lineWidth = 3;
+    context.strokeRect(x, y, platform.w, platform.h);
+  }
 
   for (let x = -40 - (cameraX % 180); x < canvas.width + 180; x += 180) {
     context.fillStyle = "#2e5a30";
-    context.fillRect(x + 8, WORLD.groundY - 36, 10, 36);
+    context.fillRect(x + 8, screenY(state, WORLD.groundY - 36), 10, 36);
     context.fillStyle = "#6aa84f";
     context.beginPath();
-    context.ellipse(x + 13, WORLD.groundY - 40, 22, 10, -0.4, 0, Math.PI * 2);
+    context.ellipse(x + 13, screenY(state, WORLD.groundY - 40), 22, 10, -0.4, 0, Math.PI * 2);
     context.fill();
     context.beginPath();
-    context.ellipse(x + 28, WORLD.groundY - 25, 18, 8, 0.5, 0, Math.PI * 2);
+    context.ellipse(x + 28, screenY(state, WORLD.groundY - 25), 18, 8, 0.5, 0, Math.PI * 2);
     context.fill();
   }
 }
@@ -52,28 +81,29 @@ function drawExtraction(context, state) {
 
   const exit = state.extraction;
   const x = screenX(state, exit.x);
+  const y = screenY(state, exit.y);
   const pulse = 0.55 + Math.sin(performance.now() / 140) * 0.18;
 
   context.save();
   context.shadowColor = "#f4d35e";
   context.shadowBlur = 24 + pulse * 16;
   context.fillStyle = "#f4d35e";
-  context.fillRect(x, exit.y, exit.w, exit.h);
+  context.fillRect(x, y, exit.w, exit.h);
   context.restore();
 
   context.fillStyle = "#344e41";
-  context.fillRect(x + 16, exit.y + 18, exit.w - 32, exit.h - 18);
+  context.fillRect(x + 16, y + 18, exit.w - 32, exit.h - 18);
   context.fillStyle = "#fff8d7";
-  context.fillRect(x + 27, exit.y + 34, exit.w - 54, 12);
+  context.fillRect(x + 27, y + 34, exit.w - 54, 12);
   context.strokeStyle = `rgba(255, 248, 215, ${pulse})`;
   context.lineWidth = 4;
-  context.strokeRect(x - 8, exit.y - 8, exit.w + 16, exit.h + 16);
+  context.strokeRect(x - 8, y - 8, exit.w + 16, exit.h + 16);
 }
 
 function drawPickups(context, state) {
   for (const pickup of state.pickups) {
     const x = screenX(state, pickup.x);
-    const y = pickup.y;
+    const y = screenY(state, pickup.y);
 
     context.fillStyle = pickup.color;
     context.beginPath();
@@ -87,16 +117,16 @@ function drawPickups(context, state) {
     context.font = "bold 15px Arial";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText(pickup.id.slice(0, 1).toUpperCase(), x + pickup.w / 2, y + pickup.h / 2 + 1);
+    context.fillText(pickup.id === "health" ? "+" : pickup.id.slice(0, 1).toUpperCase(), x + pickup.w / 2, y + pickup.h / 2 + 1);
   }
 }
 
 function drawPellets(context, state) {
   for (const pellet of state.pellets) {
     const x = screenX(state, pellet.x);
-    const y = pellet.y;
+    const y = screenY(state, pellet.y);
     const previousX = screenX(state, pellet.previousX ?? pellet.x - pellet.vx * 0.018);
-    const previousY = pellet.previousY ?? pellet.y - pellet.vy * 0.018;
+    const previousY = screenY(state, pellet.previousY ?? pellet.y - pellet.vy * 0.018);
 
     context.strokeStyle = "rgba(255, 244, 163, 0.55)";
     context.lineWidth = 3;
@@ -119,11 +149,40 @@ function drawEffects(context, state) {
   for (const effect of state.effects) {
     const progress = effect.life / effect.maxLife;
     const x = screenX(state, effect.x);
+    const y = screenY(state, effect.y);
+
+    if (effect.kind === "splatter") {
+      context.globalAlpha = Math.max(0, progress);
+      context.fillStyle = effect.color;
+      context.beginPath();
+      context.arc(x, y, effect.radius * (0.55 + progress), 0, Math.PI * 2);
+      context.fill();
+      context.globalAlpha = 1;
+      continue;
+    }
+
+    if (effect.kind === "stock") {
+      context.save();
+      context.globalAlpha = Math.max(0, progress * 0.55);
+      context.strokeStyle = "rgba(255, 255, 255, 0.92)";
+      context.lineWidth = 18;
+      context.lineCap = "round";
+      context.beginPath();
+      context.arc(x, y, effect.radius * (1.18 - progress * 0.14), -1.05, 1.05);
+      context.stroke();
+      context.strokeStyle = "rgba(216, 249, 87, 0.5)";
+      context.lineWidth = 7;
+      context.beginPath();
+      context.arc(x, y, effect.radius * (1.02 - progress * 0.08), -1.15, 1.15);
+      context.stroke();
+      context.restore();
+      continue;
+    }
 
     if (effect.kind === "muzzle") {
       context.save();
       context.globalAlpha = Math.max(0, progress);
-      context.translate(x, effect.y);
+      context.translate(x, y);
       context.rotate(effect.angle ?? 0);
       context.fillStyle = effect.color;
       context.beginPath();
@@ -141,7 +200,7 @@ function drawEffects(context, state) {
       context.globalAlpha = Math.max(0, progress * 0.7);
       context.fillStyle = effect.color;
       context.beginPath();
-      context.ellipse(x, effect.y, effect.radius * (1.4 - progress), 9 * (1.2 - progress * 0.4), 0, 0, Math.PI * 2);
+      context.ellipse(x, y, effect.radius * (1.4 - progress), 9 * (1.2 - progress * 0.4), 0, 0, Math.PI * 2);
       context.fill();
       context.globalAlpha = 1;
       continue;
@@ -151,7 +210,7 @@ function drawEffects(context, state) {
     context.strokeStyle = effect.color;
     context.lineWidth = 3;
     context.beginPath();
-    context.arc(x, effect.y, effect.radius * (1.15 - progress), 0, Math.PI * 2);
+    context.arc(x, y, effect.radius * (1.15 - progress), 0, Math.PI * 2);
     context.stroke();
     context.globalAlpha = 1;
   }
@@ -160,17 +219,66 @@ function drawEffects(context, state) {
 function drawEnemies(context, state) {
   for (const enemy of state.enemies) {
     const x = screenX(state, enemy.x);
-    const y = enemy.y;
+    const y = screenY(state, enemy.y);
     const healthRatio = Math.max(0, enemy.health / enemy.maxHealth);
+    const bodyColor = enemy.isBoss ? "#7a2e3b" : enemy.type === "fast" ? "#b33b34" : enemy.type === "fat" ? "#a0572d" : "#566f45";
+    const headRadius = enemy.isBoss ? 26 : enemy.type === "fat" ? 15 : 12;
+    const headX = x + enemy.w * 0.52;
+    const headY = y + headRadius + 2;
 
-    context.fillStyle = enemy.isBoss ? "#7a2e3b" : enemy.type === "fast" ? "#7b9e46" : enemy.type === "fat" ? "#a0572d" : "#566f45";
+    if (enemy.flying) {
+      const balloonX = x + enemy.w / 2;
+      const balloonY = y - 34;
+      context.fillStyle = "#ef476f";
+      context.beginPath();
+      context.ellipse(balloonX, balloonY, 18, 23, 0, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "rgba(255, 255, 255, 0.45)";
+      context.beginPath();
+      context.ellipse(balloonX - 6, balloonY - 8, 5, 8, -0.4, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "#3d2b1f";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.moveTo(balloonX, balloonY + 22);
+      context.lineTo(headX, headY - headRadius);
+      context.stroke();
+    }
+
+    context.fillStyle = bodyColor;
     context.beginPath();
-    context.roundRect(x, y, enemy.w, enemy.h, enemy.isBoss ? 8 : 5);
+    context.roundRect(x + enemy.w * 0.18, y + enemy.h * 0.3, enemy.w * 0.64, enemy.h * 0.48, enemy.isBoss ? 10 : 6);
+    context.fill();
+
+    context.strokeStyle = bodyColor;
+    context.lineWidth = enemy.isBoss ? 10 : 6;
+    context.lineCap = "round";
+    context.beginPath();
+    context.moveTo(x + enemy.w * 0.26, y + enemy.h * 0.42);
+    context.lineTo(x + enemy.w * 0.02, y + enemy.h * 0.6);
+    context.moveTo(x + enemy.w * 0.72, y + enemy.h * 0.44);
+    context.lineTo(x + enemy.w * 0.96, y + enemy.h * 0.57);
+    context.moveTo(x + enemy.w * 0.37, y + enemy.h * 0.76);
+    context.lineTo(x + enemy.w * 0.2, y + enemy.h);
+    context.moveTo(x + enemy.w * 0.63, y + enemy.h * 0.76);
+    context.lineTo(x + enemy.w * 0.82, y + enemy.h);
+    context.stroke();
+    context.lineCap = "butt";
+
+    context.fillStyle = enemy.type === "fast" ? "#d85a4f" : "#8aa26a";
+    context.beginPath();
+    context.arc(headX, headY, headRadius, 0, Math.PI * 2);
     context.fill();
 
     context.fillStyle = "#24351f";
-    context.fillRect(x + enemy.w * 0.22, y + enemy.h * 0.22, 8, 8);
-    context.fillRect(x + enemy.w * 0.62, y + enemy.h * 0.22, 8, 8);
+    context.fillRect(headX - headRadius * 0.45, headY - 3, 5, 5);
+    context.fillRect(headX + headRadius * 0.22, headY - 3, 5, 5);
+    context.strokeStyle = "#24351f";
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(headX - headRadius * 0.35, headY + headRadius * 0.35);
+    context.lineTo(headX + headRadius * 0.35, headY + headRadius * 0.28);
+    context.stroke();
 
     context.fillStyle = "rgba(0, 0, 0, 0.45)";
     context.fillRect(x, y - 12, enemy.w, 6);
@@ -182,14 +290,14 @@ function drawEnemies(context, state) {
 function drawCorpses(context, state) {
   for (const corpse of state.corpses) {
     const x = screenX(state, corpse.x);
-    const y = corpse.y;
+    const y = screenY(state, corpse.y);
     const fade = Math.min(1, corpse.life / 0.8);
 
     context.save();
     context.globalAlpha = Math.max(0, fade);
     context.translate(x + corpse.w / 2, y + corpse.h / 2);
     context.rotate(corpse.rotation);
-    context.fillStyle = corpse.type === "fast" ? "#5d7d35" : corpse.type === "fat" ? "#7c4326" : "#3f5335";
+    context.fillStyle = corpse.type === "fast" ? "#8f2f2a" : corpse.type === "fat" ? "#7c4326" : "#3f5335";
     context.beginPath();
     context.roundRect(-corpse.w / 2, -corpse.h / 2, corpse.w, corpse.h, 5);
     context.fill();
@@ -212,13 +320,14 @@ function drawFloatTexts(context, state) {
   for (const floatText of state.floatTexts) {
     const progress = Math.max(0, floatText.life / floatText.maxLife);
     const x = screenX(state, floatText.x);
+    const y = screenY(state, floatText.y);
 
     context.globalAlpha = progress;
     context.lineWidth = 4;
     context.strokeStyle = "rgba(0, 0, 0, 0.58)";
-    context.strokeText(floatText.text, x, floatText.y);
+    context.strokeText(floatText.text, x, y);
     context.fillStyle = floatText.color;
-    context.fillText(floatText.text, x, floatText.y);
+    context.fillText(floatText.text, x, y);
   }
 
   context.restore();
@@ -230,7 +339,7 @@ function drawStockArc(context, state) {
   if (player.stockTimer <= 0) return;
 
   const centerX = screenX(state, player.x + player.w / 2);
-  const centerY = player.y + player.h / 2;
+  const centerY = screenY(state, player.y + player.h / 2);
   const range = SHOTGUN.stockRange + (state.activePowerUps.longStock > 0 ? 42 : 0);
   const progress = 1 - player.stockTimer / SHOTGUN.stockArcSeconds;
   const sweep = 1.7 * Math.max(0.12, progress);
@@ -249,10 +358,10 @@ function drawStockArc(context, state) {
 function drawPlayer(context, state, input) {
   const player = state.player;
   const x = screenX(state, player.x);
-  const y = player.y;
+  const y = screenY(state, player.y);
   const centerX = x + player.w / 2;
   const centerY = y + player.h / 2;
-  const baseAim = normalize((input?.mouse?.worldX ?? player.x + player.facing) - (player.x + player.w / 2), (input?.mouse?.worldY ?? centerY) - (player.y + player.h / 2));
+  const baseAim = normalize((input?.mouse?.worldX ?? player.x + player.facing) - (player.x + player.w / 2), (input?.mouse?.worldY ?? player.y + player.h / 2) - (player.y + player.h / 2));
   let aim = baseAim;
 
   if (player.stockTimer > 0) {
@@ -345,12 +454,23 @@ function updateHud(state) {
   }
 
   const player = state.player;
+  const modeLabel = state.mode === "level" ? "关卡" : state.mode === "balloon" ? "打气球" : "无尽";
+  const weaponLabel = state.weapon === "rifle" ? "步枪" : state.weapon === "pistol" ? "手枪" : "霰弹枪";
+  const progressLabel =
+    state.status === "victory"
+      ? "15关全部通关"
+      : state.mode === "level"
+      ? `第 ${state.level} 关`
+      : state.mode === "balloon"
+        ? `第 ${state.level} 关 / ${Math.ceil(state.balloonTimer)}秒`
+        : `第 ${state.wave} 波`;
   const items = [
     `生命：${Math.ceil(player.health)}`,
     `弹药：${player.ammo}/${player.magazineSize}`,
     player.reloading ? `换弹中：${player.reloadTimer.toFixed(1)}秒` : "换弹：准备就绪",
-    state.mode === "level" ? "模式：关卡" : "模式：无尽",
-    state.mode === "level" ? `第 ${state.level} 关` : `第 ${state.wave} 波`,
+    `模式：${modeLabel}`,
+    `武器：${weaponLabel}`,
+    progressLabel,
     `击杀：${state.kills}`,
     `分数：${state.score}`,
     formatPowerUps(state.activePowerUps),
@@ -362,6 +482,8 @@ function updateHud(state) {
 
   if (state.mode === "level") {
     items.splice(5, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余怪物：${state.enemiesRemaining ?? state.enemies.length}`);
+  } else if (state.mode === "balloon") {
+    items.splice(5, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余气球：${state.enemiesRemaining ?? state.enemies.length}`);
   }
 
   hud.innerHTML = items
