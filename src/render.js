@@ -63,6 +63,20 @@ function drawBackground(context, canvas, state) {
     context.strokeRect(x, y, platform.w, platform.h);
   }
 
+  for (const wall of WORLD.walls) {
+    const x = screenX(state, wall.x);
+    const y = screenY(state, wall.y);
+    context.fillStyle = "#7b4a32";
+    context.fillRect(x, y, wall.w, wall.h);
+    context.fillStyle = "#a85d3c";
+    for (let tileY = y + 6; tileY < y + wall.h - 8; tileY += 18) {
+      context.fillRect(x + 5, tileY, wall.w - 10, 6);
+    }
+    context.strokeStyle = "#4d2f22";
+    context.lineWidth = 3;
+    context.strokeRect(x, y, wall.w, wall.h);
+  }
+
   for (let x = -40 - (cameraX % 180); x < canvas.width + 180; x += 180) {
     context.fillStyle = "#2e5a30";
     context.fillRect(x + 8, screenY(state, WORLD.groundY - 36), 10, 36);
@@ -143,6 +157,27 @@ function drawPellets(context, state) {
   }
 
   context.lineCap = "butt";
+}
+
+function drawEnemyProjectiles(context, state) {
+  for (const projectile of state.enemyProjectiles) {
+    const x = screenX(state, projectile.x);
+    const y = screenY(state, projectile.y);
+    const radius = Math.max(projectile.w ?? 12, projectile.h ?? 12) / 2;
+
+    context.save();
+    context.shadowColor = projectile.color ?? "#d7263d";
+    context.shadowBlur = 10;
+    context.fillStyle = projectile.color ?? "#d7263d";
+    context.beginPath();
+    context.arc(x + radius, y + radius, radius, 0, Math.PI * 2);
+    context.fill();
+    context.shadowBlur = 0;
+    context.strokeStyle = "rgba(255, 248, 215, 0.75)";
+    context.lineWidth = 2;
+    context.stroke();
+    context.restore();
+  }
 }
 
 function drawEffects(context, state) {
@@ -226,6 +261,22 @@ function drawEnemies(context, state) {
     const headX = x + enemy.w * 0.52;
     const headY = y + headRadius + 2;
 
+    if (enemy.isSlime) {
+      const slimeColor = enemy.type === "slimeHigh" ? "#2ec4b6" : enemy.type === "slimeMid" ? "#57cc99" : "#80ed99";
+      context.fillStyle = slimeColor;
+      context.beginPath();
+      context.ellipse(x + enemy.w / 2, y + enemy.h * 0.68, enemy.w * 0.44, enemy.h * 0.34, 0, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#174c43";
+      context.fillRect(x + enemy.w * 0.32, y + enemy.h * 0.55, 5, 5);
+      context.fillRect(x + enemy.w * 0.6, y + enemy.h * 0.55, 5, 5);
+      context.fillStyle = "rgba(0, 0, 0, 0.45)";
+      context.fillRect(x, y - 12, enemy.w, 6);
+      context.fillStyle = "#f4d35e";
+      context.fillRect(x, y - 12, enemy.w * healthRatio, 6);
+      continue;
+    }
+
     if (enemy.flying) {
       const balloonX = x + enemy.w / 2;
       const balloonY = y - 34;
@@ -264,6 +315,29 @@ function drawEnemies(context, state) {
     context.lineTo(x + enemy.w * 0.82, y + enemy.h);
     context.stroke();
     context.lineCap = "butt";
+
+    if (enemy.hasShield) {
+      const shieldW = Math.max(14, enemy.w * 0.28);
+      const shieldH = enemy.h * 0.58;
+      const shieldX = enemy.facing >= 0 ? x + enemy.w * 0.66 : x + enemy.w * 0.06;
+      const shieldY = y + enemy.h * 0.28;
+      context.fillStyle = enemy.shieldBroken ? "#5f6670" : "#9fb3c8";
+      context.strokeStyle = enemy.shieldBroken ? "#30343b" : "#d7e3fc";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.roundRect(shieldX, shieldY, shieldW, shieldH, 4);
+      context.fill();
+      context.stroke();
+      if (enemy.shieldBroken) {
+        context.strokeStyle = "#24272d";
+        context.lineWidth = 2;
+        context.beginPath();
+        context.moveTo(shieldX + shieldW * 0.25, shieldY + shieldH * 0.2);
+        context.lineTo(shieldX + shieldW * 0.72, shieldY + shieldH * 0.55);
+        context.lineTo(shieldX + shieldW * 0.35, shieldY + shieldH * 0.85);
+        context.stroke();
+      }
+    }
 
     context.fillStyle = enemy.type === "fast" ? "#d85a4f" : "#8aa26a";
     context.beginPath();
@@ -340,7 +414,7 @@ function drawStockArc(context, state) {
 
   const centerX = screenX(state, player.x + player.w / 2);
   const centerY = screenY(state, player.y + player.h / 2);
-  const range = SHOTGUN.stockRange + (state.activePowerUps.longStock > 0 ? 42 : 0);
+  const range = SHOTGUN.stockRange + (Math.max(state.activePowerUps.longStock ?? 0, state.permanentPowerUps?.longStock ?? 0) > 0 ? 42 : 0);
   const progress = 1 - player.stockTimer / SHOTGUN.stockArcSeconds;
   const sweep = 1.7 * Math.max(0.12, progress);
   const start = player.facing >= 0 ? -1.25 : Math.PI + 1.25;
@@ -410,13 +484,15 @@ function drawPlayer(context, state, input) {
   }
 }
 
-function formatPowerUps(activePowerUps) {
-  const entries = Object.entries(activePowerUps);
-  if (entries.length === 0) return "强化：无";
+function formatPowerUps(activePowerUps, permanentPowerUps = {}) {
+  const activeEntries = Object.entries(activePowerUps);
+  const permanentEntries = Object.entries(permanentPowerUps);
+  if (activeEntries.length === 0 && permanentEntries.length === 0) return "强化：无";
 
-  return `强化：${entries
-    .map(([id, time]) => `${POWER_UPS[id]?.label ?? id} ${Math.ceil(time)}s`)
-    .join(", ")}`;
+  const permanentText = permanentEntries.map(([id, count]) => `${POWER_UPS[id]?.label ?? id} 永久x${count}`);
+  const activeText = activeEntries.map(([id, time]) => `${POWER_UPS[id]?.label ?? id} ${Math.ceil(time)}s`);
+
+  return `强化：${[...permanentText, ...activeText].join(", ")}`;
 }
 
 function drawBossBar(context, canvas, state) {
@@ -473,7 +549,8 @@ function updateHud(state) {
     progressLabel,
     `击杀：${state.kills}`,
     `分数：${state.score}`,
-    formatPowerUps(state.activePowerUps),
+    `最高分：${state.highScore ?? 0}`,
+    formatPowerUps(state.activePowerUps, state.permanentPowerUps),
     "A/D 移动",
     "空格跳跃",
     "左键开枪",
@@ -482,6 +559,9 @@ function updateHud(state) {
 
   if (state.mode === "level") {
     items.splice(5, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余怪物：${state.enemiesRemaining ?? state.enemies.length}`);
+    if (state.level % 5 === 0) {
+      items.splice(6, 0, state.awaitingWeaponChoice ? "Boss奖励：选择下一关武器" : "Boss关：强制霰弹枪");
+    }
   } else if (state.mode === "balloon") {
     items.splice(5, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余气球：${state.enemiesRemaining ?? state.enemies.length}`);
   }
@@ -503,6 +583,7 @@ export function drawGame(context, canvas, state, input) {
   drawExtraction(context, state);
   drawPickups(context, state);
   drawPellets(context, state);
+  drawEnemyProjectiles(context, state);
   drawEffects(context, state);
   drawCorpses(context, state);
   drawEnemies(context, state);

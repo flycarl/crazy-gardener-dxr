@@ -14,14 +14,25 @@
         <p class="control-hint">A/D 移动 / 空格跳跃 / 鼠标瞄准 / 左键开枪 / 右键挥枪托</p>
         <div class="menu-actions">
           <button id="rifleToggle" type="button">步枪模式：关</button>
+          <button id="rifleFireModeToggle" type="button">步枪射击：单发</button>
           <button id="levelMode" type="button">关卡模式</button>
           <button id="endlessMode" type="button">无尽模式</button>
-          <button id="balloonMode" type="button">打气球模式</button>
+          <button id="balloonMode" type="button">打气球模式：手枪</button>
         </div>
+        <p id="rifleModeHint" class="control-hint">单发伤害更高。连发伤害低一些，但速度更快。</p>
+        <p class="control-hint">打气球模式：手枪模式，不受霰弹枪和步枪影响。</p>
       </section>
       <section id="nextLevelPanel" class="next-level-panel hidden">
         <div class="next-level-title">通关！</div>
         <button id="nextLevelButton" type="button">下一关</button>
+        <div id="postBossWeaponChoices" class="failure-actions hidden">
+          <button id="chooseRifleButton" type="button">使用步枪</button>
+          <button id="chooseShotgunButton" type="button">继续霰弹枪</button>
+          <div id="postBossRifleModeChoices" class="failure-actions hidden">
+            <button id="chooseRifleSingleButton" type="button">步枪单发</button>
+            <button id="chooseRifleAutoButton" type="button">步枪连发</button>
+          </div>
+        </div>
       </section>
       <section id="failurePanel" class="next-level-panel hidden">
         <div class="failure-title">失败</div>

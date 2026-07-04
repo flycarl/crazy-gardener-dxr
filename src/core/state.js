@@ -12,6 +12,9 @@ export function createPlayer(mode = "level", weapon = "shotgun") {
     h: PLAYER.height,
     maxHealth: PLAYER.maxHealth,
     health: PLAYER.maxHealth,
+    regenDelay: 0,
+    regenTimer: 0,
+    regenStartHealth: PLAYER.maxHealth,
     weapon: activeWeapon,
     facing: 1,
     onGround: true,
@@ -28,35 +31,45 @@ export function createPlayer(mode = "level", weapon = "shotgun") {
   };
 }
 
-export function createGameState(mode = "level", weapon = "shotgun") {
+export function createGameState(mode = "level", weapon = "shotgun", rifleMode = "single") {
   const activeWeapon = mode === "balloon" ? "pistol" : weapon;
 
   return {
     mode,
     weapon: activeWeapon,
+    rifleMode: activeWeapon === "rifle" ? rifleMode : "single",
     status: "playing",
     level: 1,
     wave: 1,
     score: 0,
+    highScore: 0,
     kills: 0,
     cameraX: 0,
     cameraY: 0,
     player: createPlayer(mode, activeWeapon),
     enemies: [],
     pellets: [],
+    enemyProjectiles: [],
     pickups: [],
     effects: [],
     corpses: [],
     floatTexts: [],
     activePowerUps: {},
+    permanentPowerUps: {},
     extraction: { active: false, x: WORLD.width - 220, y: WORLD.groundY - 90, w: 86, h: 90 },
     spawnTimer: 0,
     balloonTimer: mode === "balloon" ? BALLOON_MODE.seconds : 0,
     requiredKills: mode === "level" ? 8 : mode === "balloon" ? BALLOON_MODE.targetKills : Infinity,
     bossSpawned: false,
     awaitingNextLevel: false,
+    awaitingWeaponChoice: false,
     pendingBoss: false,
     pendingBossType: null,
+    pendingEndlessBoss: false,
+    pendingEndlessBossType: null,
+    endlessBossActive: false,
+    endlessWavesSinceBreak: 0,
+    bossAddTimer: 5,
     nextLevel: 1,
   };
 }

@@ -1,5 +1,5 @@
 import { createGameState } from "./core/state.js";
-import { advanceToNextLevel, configureBalloonLevel, configureLevel, restartChallenge, spawnLevelEnemies, updateGame } from "./core/systems.js";
+import { advanceToNextLevel, choosePostBossWeapon, configureBalloonLevel, configureEndlessMode, configureLevel, recordHighScore, restartChallenge, spawnLevelEnemies, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
 import { drawGame } from "./render.js";
 
@@ -9,16 +9,26 @@ const menu = document.querySelector("#menu");
 const nextLevelPanel = document.querySelector("#nextLevelPanel");
 const nextLevelTitle = document.querySelector(".next-level-title");
 const nextLevelButton = document.querySelector("#nextLevelButton");
+const postBossWeaponChoices = document.querySelector("#postBossWeaponChoices");
+const postBossRifleModeChoices = document.querySelector("#postBossRifleModeChoices");
+const chooseRifleButton = document.querySelector("#chooseRifleButton");
+const chooseShotgunButton = document.querySelector("#chooseShotgunButton");
+const chooseRifleSingleButton = document.querySelector("#chooseRifleSingleButton");
+const chooseRifleAutoButton = document.querySelector("#chooseRifleAutoButton");
 const failurePanel = document.querySelector("#failurePanel");
 const failureTitle = document.querySelector(".failure-title");
 const retryButton = document.querySelector("#retryButton");
 const mainMenuButton = document.querySelector("#mainMenuButton");
 const rifleToggle = document.querySelector("#rifleToggle");
+const rifleFireModeToggle = document.querySelector("#rifleFireModeToggle");
+const rifleModeHint = document.querySelector("#rifleModeHint");
 const input = createInput(canvas);
 
 let state = null;
 let lastTime = performance.now();
 let selectedWeapon = "shotgun";
+let selectedRifleMode = "single";
+let highScore = Number(localStorage.getItem("crazyGardenerHighScore") ?? 0);
 
 function getAimDirection(currentState) {
   const player = currentState.player;
@@ -32,7 +42,8 @@ function getAimDirection(currentState) {
 }
 
 function start(mode) {
-  state = createGameState(mode, selectedWeapon);
+  state = createGameState(mode, selectedWeapon, selectedRifleMode);
+  state.highScore = highScore;
 
   if (mode === "balloon") {
     configureBalloonLevel(state, 1);
@@ -40,7 +51,7 @@ function start(mode) {
     configureLevel(state, 1);
     spawnLevelEnemies(state);
   } else {
-    state.spawnTimer = 0;
+    configureEndlessMode(state);
   }
 
   menu.classList.add("hidden");
@@ -53,6 +64,19 @@ function updateNextLevelPanel() {
     nextLevelTitle.textContent = "全部通关！";
     nextLevelButton.textContent = "主菜单";
     nextLevelButton.disabled = false;
+    postBossWeaponChoices.classList.add("hidden");
+    postBossRifleModeChoices.classList.add("hidden");
+    nextLevelPanel.classList.remove("hidden");
+    return;
+  }
+
+  if (state?.awaitingWeaponChoice) {
+    nextLevelTitle.textContent = "Boss 已击败！选择下一关武器";
+    nextLevelButton.classList.add("hidden");
+    postBossWeaponChoices.classList.remove("hidden");
+    if (!postBossRifleModeChoices.dataset.choosing) {
+      postBossRifleModeChoices.classList.add("hidden");
+    }
     nextLevelPanel.classList.remove("hidden");
     return;
   }
@@ -65,6 +89,10 @@ function updateNextLevelPanel() {
   nextLevelTitle.textContent = "通关！";
   nextLevelButton.textContent = "下一关";
   nextLevelButton.disabled = false;
+  nextLevelButton.classList.remove("hidden");
+  postBossWeaponChoices.classList.add("hidden");
+  postBossRifleModeChoices.classList.add("hidden");
+  delete postBossRifleModeChoices.dataset.choosing;
   nextLevelPanel.classList.remove("hidden");
 }
 
@@ -88,11 +116,25 @@ function returnToMenu() {
   state = null;
   menu.classList.remove("hidden");
   nextLevelPanel.classList.add("hidden");
+  nextLevelButton.classList.remove("hidden");
+  postBossWeaponChoices.classList.add("hidden");
+  postBossRifleModeChoices.classList.add("hidden");
+  delete postBossRifleModeChoices.dataset.choosing;
   failurePanel.classList.add("hidden");
 }
 
 function updateRifleToggle() {
   rifleToggle.textContent = selectedWeapon === "rifle" ? "步枪模式：开" : "步枪模式：关";
+  rifleFireModeToggle.hidden = selectedWeapon !== "rifle";
+  rifleModeHint.hidden = selectedWeapon !== "rifle";
+  rifleFireModeToggle.textContent = selectedRifleMode === "auto" ? "步枪射击：连发" : "步枪射击：单发";
+  rifleModeHint.textContent = selectedRifleMode === "auto" ? "连发伤害低一些，但速度更快。" : "单发伤害更高。";
+}
+
+function saveHighScore() {
+  if (!state) return;
+  highScore = recordHighScore(state, highScore);
+  localStorage.setItem("crazyGardenerHighScore", String(highScore));
 }
 
 function frame(now) {
@@ -107,6 +149,7 @@ function frame(now) {
     const pressed = consumePressed(input);
 
     updateGame(state, input, pressed, dt);
+    saveHighScore();
     updatePanels();
   }
 
@@ -119,6 +162,47 @@ document.querySelector("#endlessMode")?.addEventListener("click", () => start("e
 document.querySelector("#balloonMode")?.addEventListener("click", () => start("balloon"));
 rifleToggle.addEventListener("click", () => {
   selectedWeapon = selectedWeapon === "rifle" ? "shotgun" : "rifle";
+  updateRifleToggle();
+});
+chooseRifleButton.addEventListener("click", () => {
+  if (state) {
+    nextLevelTitle.textContent = "选择步枪射击方式";
+    postBossRifleModeChoices.dataset.choosing = "true";
+    postBossRifleModeChoices.classList.remove("hidden");
+  }
+});
+chooseShotgunButton.addEventListener("click", () => {
+  if (state) {
+    choosePostBossWeapon(state, "shotgun");
+    selectedWeapon = "shotgun";
+    updateRifleToggle();
+    updatePanels();
+  }
+});
+chooseRifleSingleButton.addEventListener("click", () => {
+  if (state) {
+    choosePostBossWeapon(state, "rifle", "single");
+    selectedWeapon = "rifle";
+    selectedRifleMode = "single";
+    postBossRifleModeChoices.classList.add("hidden");
+    delete postBossRifleModeChoices.dataset.choosing;
+    updateRifleToggle();
+    updatePanels();
+  }
+});
+chooseRifleAutoButton.addEventListener("click", () => {
+  if (state) {
+    choosePostBossWeapon(state, "rifle", "auto");
+    selectedWeapon = "rifle";
+    selectedRifleMode = "auto";
+    postBossRifleModeChoices.classList.add("hidden");
+    delete postBossRifleModeChoices.dataset.choosing;
+    updateRifleToggle();
+    updatePanels();
+  }
+});
+rifleFireModeToggle.addEventListener("click", () => {
+  selectedRifleMode = selectedRifleMode === "auto" ? "single" : "auto";
   updateRifleToggle();
 });
 nextLevelButton.addEventListener("click", () => {

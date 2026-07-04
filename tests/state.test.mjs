@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ENEMY_TYPES, LEVELS, POWER_UPS, RIFLE, SHOTGUN, WORLD } from "../src/core/constants.js";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
 import {
@@ -7,10 +8,13 @@ import {
   applyPelletHits,
   completeExtraction,
   configureBalloonLevel,
+  configureEndlessMode,
   configureLevel,
   createEnemy,
   fireShotgun,
   advanceToNextLevel,
+  recordHighScore,
+  choosePostBossWeapon,
   spawnLevelEnemies,
   spawnPowerUp,
   queueDoubleShot,
@@ -55,6 +59,25 @@ test("balloon mode starts with eight pistol shots and a thirty second timer", ()
   assert.equal(state.requiredKills, 5);
   assert.equal(state.enemies.length, 5);
   assert.equal(state.enemies.every((enemy) => enemy.type === "balloon" && enemy.flying), true);
+});
+
+test("balloon mode pistol kills one balloon zombie with two body shots", () => {
+  const state = createGameState("balloon");
+  configureBalloonLevel(state, 1);
+  const enemy = state.enemies[0];
+  state.enemies = [enemy];
+
+  for (let index = 0; index < 2; index += 1) {
+    fireShotgun(state, { x: 1, y: 0 });
+    assert.equal(state.pellets[0].damage, ENEMY_TYPES.balloon.health / 2);
+    state.pellets[0].x = enemy.x + enemy.w / 2;
+    state.pellets[0].y = enemy.y + enemy.h / 2;
+    applyPelletHits(state);
+    state.player.shotCooldown = 0;
+  }
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.kills, 1);
 });
 
 test("rifle weapon starts level mode with thirty rifle rounds", () => {
@@ -118,11 +141,91 @@ test("rifle fires one piercing bullet from a thirty round magazine", () => {
   assert.equal(state.pellets[0].damage, RIFLE.damage);
 });
 
+test("rifle single-shot mode hits harder than automatic mode", () => {
+  const singleState = createGameState("level", "rifle", "single");
+  const autoState = createGameState("level", "rifle", "auto");
+
+  fireShotgun(singleState, { x: 1, y: 0 });
+  fireShotgun(autoState, { x: 1, y: 0 });
+
+  assert.equal(singleState.rifleMode, "single");
+  assert.equal(autoState.rifleMode, "auto");
+  assert.ok(singleState.pellets[0].damage > autoState.pellets[0].damage);
+  assert.ok(autoState.player.shotCooldown < singleState.player.shotCooldown);
+});
+
+test("rifle is weaker and automatic fire has a slower realistic cadence", () => {
+  assert.ok(RIFLE.damage < 28);
+  assert.ok(RIFLE.autoDamage <= 10);
+  assert.ok(RIFLE.autoCooldownSeconds >= 0.16);
+  assert.ok(RIFLE.airRecoil > 115);
+});
+
+test("automatic rifle fires repeatedly while the trigger is held", () => {
+  const state = createGameState("level", "rifle", "auto");
+
+  updateGame(
+    state,
+    { right: false, left: false, shootHeld: true, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    0.1,
+  );
+
+  assert.equal(state.player.ammo, 29);
+  assert.equal(state.pellets.length, 1);
+});
+
+test("rifle gives Dave a small air recoil boost when shooting downward", () => {
+  const rifleState = createGameState("level", "rifle");
+  const shotgunState = createGameState("level");
+  rifleState.player.onGround = false;
+  shotgunState.player.onGround = false;
+  rifleState.player.vy = 0;
+  shotgunState.player.vy = 0;
+
+  fireShotgun(rifleState, { x: 0, y: 1 });
+  fireShotgun(shotgunState, { x: 0, y: 1 });
+
+  assert.ok(rifleState.player.vy < 0);
+  assert.ok(Math.abs(rifleState.player.vy) < Math.abs(shotgunState.player.vy));
+});
+
+test("Dave starts regenerating five seconds after damage and fills health over three seconds", () => {
+  const state = createGameState("level");
+  state.player.health = 40;
+  state.player.regenDelay = 5;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    5,
+  );
+
+  assert.equal(state.player.health, 40);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1.5,
+  );
+  assert.ok(state.player.health > 65 && state.player.health < 75);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1.5,
+  );
+  assert.equal(state.player.health, state.player.maxHealth);
+});
+
 test("rifle bullet damages a second enemy for reduced piercing damage", () => {
   const state = createGameState("level", "rifle");
-  const firstEnemy = createEnemy("fat", 250, state.player.y);
-  const secondEnemy = createEnemy("fat", 254, state.player.y);
-  state.enemies.push(firstEnemy, secondEnemy);
+  const firstEnemy = createEnemy("normal", 250, state.player.y);
+  const secondEnemy = createEnemy("normal", 254, state.player.y);
+  state.enemies.push(firstEnemy);
   state.pellets.push({
     x: 256,
     y: state.player.y + 20,
@@ -137,6 +240,23 @@ test("rifle bullet damages a second enemy for reduced piercing damage", () => {
   });
 
   applyPelletHits(state);
+  state.pellets = [];
+
+  state.enemies.push(secondEnemy);
+  state.pellets.push({
+    x: 256,
+    y: state.player.y + 20,
+    vx: 1200,
+    vy: 0,
+    life: 1,
+    radius: 4,
+    damage: RIFLE.damage,
+    damageFalloff: RIFLE.pierceDamageMultiplier,
+    piercesRemaining: 0,
+    hitEnemyIds: [firstEnemy.id],
+  });
+
+  applyPelletHits(state);
 
   const firstDamage = firstEnemy.maxHealth - firstEnemy.health;
   const secondDamage = secondEnemy.maxHealth - secondEnemy.health;
@@ -144,6 +264,56 @@ test("rifle bullet damages a second enemy for reduced piercing damage", () => {
   assert.equal(firstDamage, RIFLE.damage);
   assert.equal(secondDamage, Math.round(RIFLE.damage * RIFLE.pierceDamageMultiplier));
   assert.ok(secondDamage < firstDamage);
+});
+
+test("one bullet damages all zombies that are overlapping at the hit point", () => {
+  const state = createGameState("level");
+  const firstEnemy = createEnemy("normal", 250, state.player.y);
+  const secondEnemy = createEnemy("fast", 250, state.player.y);
+  state.enemies.push(firstEnemy, secondEnemy);
+  state.pellets.push({
+    x: 260,
+    y: state.player.y + 20,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 5,
+    damage: 8,
+    damageFalloff: 1,
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(firstEnemy.health, firstEnemy.maxHealth - 8);
+  assert.equal(secondEnemy.health, secondEnemy.maxHealth - 8);
+});
+
+test("five shotgun pellets kill a normal zombie when all pellets hit", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("normal", 250, state.player.y);
+  state.enemies.push(enemy);
+
+  for (let index = 0; index < SHOTGUN.pelletCount; index += 1) {
+    state.pellets.push({
+      x: enemy.x + enemy.w / 2,
+      y: enemy.y + enemy.h / 2,
+      vx: 900,
+      vy: 0,
+      life: 1,
+      radius: SHOTGUN.pelletRadius,
+      damage: ENEMY_TYPES.normal.health / SHOTGUN.pelletCount,
+      damageFalloff: 1,
+      piercesRemaining: 0,
+      hitEnemyIds: [],
+    });
+  }
+
+  applyPelletHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.kills, 1);
 });
 
 test("rapid left clicks fire as fast as the player clicks while ammo remains", () => {
@@ -244,6 +414,7 @@ test("piercing power-up lets a pellet hit two enemies once", () => {
     vy: 0,
     life: 1,
     radius: 6,
+    damage: 10,
     piercesRemaining: 1,
     hitEnemyIds: [],
   });
@@ -258,7 +429,31 @@ test("piercing power-up lets a pellet hit two enemies once", () => {
 
   assert.equal(state.enemies.length, 0);
   assert.equal(state.kills, 2);
-  assert.equal(state.pellets.length, 0);
+  assert.equal(state.pellets.length, 1);
+  assert.equal(state.pellets[0].piercesRemaining, 0);
+});
+
+test("gun-killed zombies leave corpses", () => {
+  const state = createGameState("level", "rifle");
+  const enemy = createEnemy("fast", 250, state.player.y);
+  enemy.health = 10;
+  state.enemies.push(enemy);
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    vx: 1200,
+    vy: 0,
+    life: 1,
+    radius: 4,
+    damage: 20,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.corpses.length, 1);
+  assert.equal(state.corpses[0].id, `corpse-${enemy.id}`);
 });
 
 test("falling into a pit costs twenty health and respawns the player", () => {
@@ -277,7 +472,7 @@ test("falling into a pit costs twenty health and respawns the player", () => {
   assert.equal(state.player.onGround, true);
 });
 
-test("hurt players get occasional health drops instead of buffs", () => {
+test("hurt players no longer get health drops before the twenty-kill buff mark", () => {
   const state = createGameState("level");
   state.player.health = 60;
   state.kills = 4;
@@ -287,14 +482,13 @@ test("hurt players get occasional health drops instead of buffs", () => {
 
   applyPelletHits(state);
 
-  assert.equal(state.pickups.length, 1);
-  assert.equal(state.pickups[0].id, "health");
+  assert.equal(state.pickups.length, 0);
 });
 
-test("full-health players get occasional buffs instead of health drops", () => {
+test("full-health players get permanent buffs on every twentieth kill", () => {
   const state = createGameState("level");
   state.player.health = state.player.maxHealth;
-  state.kills = 6;
+  state.kills = 19;
   const enemy = createEnemy("normal", 600, 520);
   enemy.health = 0;
   state.enemies.push(enemy);
@@ -328,7 +522,7 @@ test("swingStock opens a short active window and starts cooldown", () => {
 
 test("stock swing first knocks back a non-boss enemy without killing it", () => {
   const state = createGameState("level");
-  const enemy = createEnemy("fat", state.player.x + state.player.w + 18, state.player.y);
+  const enemy = createEnemy("normal", state.player.x + state.player.w + 18, state.player.y);
   state.enemies.push(enemy);
 
   swingStock(state);
@@ -337,13 +531,14 @@ test("stock swing first knocks back a non-boss enemy without killing it", () => 
   assert.equal(state.enemies.length, 1);
   assert.equal(state.kills, 0);
   assert.equal(state.enemies[0].stockHits, 1);
+  assert.equal(state.enemies[0].health, state.enemies[0].maxHealth / 2);
   assert.ok(state.enemies[0].vx > 300);
   assert.ok(state.enemies[0].x > state.player.x + state.player.w + 18);
 });
 
 test("stock swing kills a non-boss enemy on the second hit", () => {
   const state = createGameState("level");
-  const enemy = createEnemy("fat", state.player.x + state.player.w + 18, state.player.y);
+  const enemy = createEnemy("normal", state.player.x + state.player.w + 18, state.player.y);
   state.enemies.push(enemy);
 
   swingStock(state);
@@ -359,7 +554,7 @@ test("stock swing kills a non-boss enemy on the second hit", () => {
 
 test("running stock swing kills a non-boss enemy in one hit", () => {
   const state = createGameState("level");
-  const enemy = createEnemy("fat", state.player.x + state.player.w + 18, state.player.y);
+  const enemy = createEnemy("normal", state.player.x + state.player.w + 18, state.player.y);
   state.player.vx = 430;
   state.enemies.push(enemy);
 
@@ -420,6 +615,17 @@ test("completeExtraction waits for the next-level button instead of advancing im
   assert.equal(state.nextLevel, 2);
 });
 
+test("advancing a level restores Dave to full health", () => {
+  const state = createGameState("level");
+  state.awaitingNextLevel = true;
+  state.nextLevel = 2;
+  state.player.health = 35;
+
+  advanceToNextLevel(state);
+
+  assert.equal(state.player.health, state.player.maxHealth);
+});
+
 test("completeExtraction does not advance endless mode", () => {
   const state = createGameState("endless");
   state.extraction.active = true;
@@ -455,16 +661,19 @@ test("spawnLevelEnemies uses current level plans without pending bosses", () => 
   assert.equal(state.bossSpawned, false);
 });
 
-test("level mode has fifteen handcrafted stages with rising zombie counts", () => {
-  assert.equal(LEVELS.length, 15);
+test("level mode has one hundred staged levels with rising zombie counts", () => {
+  assert.equal(LEVELS.length, 100);
 
   const enemyCounts = LEVELS.map((level) => level.enemies.length);
   for (let index = 1; index < enemyCounts.length; index += 1) {
     assert.ok(enemyCounts[index] >= enemyCounts[index - 1]);
   }
 
-  assert.ok(enemyCounts[0] < enemyCounts[7]);
-  assert.ok(enemyCounts[7] < enemyCounts[14]);
+  assert.ok(enemyCounts[0] < enemyCounts[49]);
+  assert.ok(enemyCounts[49] < enemyCounts[99]);
+  assert.equal(LEVELS[4].boss, "tankBoss");
+  assert.equal(LEVELS[9].boss, "rangedBoss");
+  assert.ok(LEVELS[99].boss);
 });
 
 test("later level plans use harder parkour platform routes", () => {
@@ -472,11 +681,20 @@ test("later level plans use harder parkour platform routes", () => {
   configureLevel(state, 1);
   const earlyPlatforms = WORLD.platforms.map((platform) => platform.x);
 
-  configureLevel(state, 15);
+  configureLevel(state, 100);
   const latePlatforms = WORLD.platforms.map((platform) => platform.x);
 
   assert.ok(latePlatforms.length > earlyPlatforms.length);
   assert.ok(Math.max(...latePlatforms) - Math.min(...latePlatforms) > Math.max(...earlyPlatforms) - Math.min(...earlyPlatforms));
+});
+
+test("level mode adds wall obstacles to the route", () => {
+  const state = createGameState("level");
+
+  configureLevel(state, 4);
+
+  assert.ok(WORLD.walls.length > 0);
+  assert.ok(WORLD.walls.every((wall) => wall.h > 0 && wall.w > 0));
 });
 
 test("level enemies spawn across the route and away from the player spawn", () => {
@@ -490,12 +708,12 @@ test("level enemies spawn across the route and away from the player spawn", () =
   assert.ok(Math.max(...spawnXs) - Math.min(...spawnXs) >= 900);
 });
 
-test("endless spawning never exceeds the enemy cap when near full", () => {
+test("endless spawning pauses instead of adding a fourth active wave", () => {
   const state = createGameState("endless");
   state.wave = 8;
   state.spawnTimer = 0;
 
-  for (let index = 0; index < 17; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     state.enemies.push(createEnemy("normal", 900 + index * 12, 520));
   }
 
@@ -506,10 +724,56 @@ test("endless spawning never exceeds the enemy cap when near full", () => {
     1 / 60,
   );
 
-  assert.ok(state.enemies.length <= 18);
-  assert.equal(state.wave, 9);
+  assert.equal(state.enemies.length, 3);
+  assert.equal(state.wave, 8);
   assert.ok(state.spawnTimer > 0);
   assert.equal(state.enemies.some((enemy) => enemy.isBoss), false);
+});
+
+test("endless mode starts the next wave when only two enemies remain", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+  state.wave = 8;
+  state.spawnTimer = 0;
+  state.enemies = [
+    createEnemy("normal", 900, WORLD.groundY),
+    createEnemy("fast", 1040, WORLD.groundY),
+  ];
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.wave, 9);
+  assert.ok(state.enemies.length > 2);
+});
+
+test("endless mode randomly borrows a level plan from levels one to one hundred", () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const state = createGameState("endless");
+    configureEndlessMode(state);
+    state.wave = 3;
+    state.spawnTimer = 0;
+    state.enemies = [];
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.endlessLevelStyle, 100);
+    assert.deepEqual(WORLD.platforms, LEVELS[99].platforms);
+    assert.deepEqual(state.enemies.map((enemy) => enemy.type), LEVELS[99].enemies.slice(0, 15));
+  } finally {
+    Math.random = originalRandom;
+  }
 });
 
 test("endless enemies spawn away from the current player position", () => {
@@ -528,7 +792,7 @@ test("endless enemies spawn away from the current player position", () => {
   assert.equal(state.enemies.every((enemy) => Math.abs(enemy.x - state.player.x) >= 520), true);
 });
 
-test("endless mode starts with fewer zombies per wave", () => {
+test("endless mode keeps each borrowed wave within the active enemy cap", () => {
   const state = createGameState("endless");
   state.wave = 1;
   state.spawnTimer = 0;
@@ -540,13 +804,100 @@ test("endless mode starts with fewer zombies per wave", () => {
     1 / 60,
   );
 
-  assert.ok(state.enemies.length <= 2);
+  assert.ok(state.enemies.length <= 15);
+  assert.ok(state.endlessLevelStyle >= 1);
+  assert.ok(state.endlessLevelStyle <= 100);
+});
+
+test("endless mode adds walls and limits active zombies to three waves", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+  state.wave = 12;
+  state.spawnTimer = 0;
+
+  for (let index = 0; index < 15; index += 1) {
+    state.enemies.push(createEnemy("normal", 900 + index * 10, 520));
+  }
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(WORLD.walls.length > 0);
+  assert.ok(state.enemies.length <= 15);
+  assert.equal(state.wave, 12);
+});
+
+test("wall obstacles block Dave's horizontal movement", () => {
+  const state = createGameState("level");
+  configureLevel(state, 4);
+  const wall = WORLD.walls[0];
+  state.player.x = wall.x - state.player.w - 2;
+  state.player.y = wall.y + wall.h - state.player.h;
+
+  updateGame(
+    state,
+    { right: true, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    0.2,
+  );
+
+  assert.ok(state.player.x + state.player.w <= wall.x + 1);
+});
+
+test("all ground zombies can jump toward platforms", () => {
+  for (const type of ["normal", "fast", "fat"]) {
+    const state = createGameState("level");
+    const platform = WORLD.platforms[0];
+    const enemy = createEnemy(type, platform.x - 34, WORLD.groundY);
+    enemy.platformChoice = "climb";
+    state.player.x = platform.x + platform.w + 120;
+    state.enemies.push(enemy);
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.ok(state.enemies[0].vy < 0);
+  }
+});
+
+test("zombies pause at walls before jumping over them", () => {
+  const state = createGameState("level");
+  configureLevel(state, 4);
+  const wall = WORLD.walls[0];
+  const enemy = createEnemy("normal", wall.x - 46, WORLD.groundY);
+  state.player.x = wall.x + 300;
+  state.enemies.push(enemy);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+  assert.ok(state.enemies[0].wallPauseTimer > 0);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    0.5,
+  );
+  assert.ok(state.enemies[0].vy < 0);
 });
 
 test("normal zombies can climb onto brick platforms", () => {
   const state = createGameState("level");
   const platform = WORLD.platforms[0];
   const enemy = createEnemy("normal", platform.x - 34, WORLD.groundY);
+  enemy.platformChoice = "climb";
   state.player.x = platform.x + platform.w + 120;
   state.enemies.push(enemy);
 
@@ -639,6 +990,119 @@ test("balloon mode bullets only disappear at world boundaries", () => {
   assert.ok(state.pellets.length < pelletCount);
 });
 
+test("balloon pops after two balloon hits and the zombie falls with half health", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("balloon", 650, WORLD.groundY);
+  state.enemies.push(enemy);
+
+  for (let index = 0; index < 2; index += 1) {
+    state.pellets.push({
+      x: enemy.x + enemy.w / 2,
+      y: enemy.y - 34,
+      vx: 900,
+      vy: 0,
+      life: 1,
+      radius: 5,
+      damage: 999,
+      damageFalloff: 1,
+      weapon: "shotgun",
+      piercesRemaining: 0,
+      hitEnemyIds: [],
+    });
+    applyPelletHits(state);
+  }
+
+  assert.equal(enemy.flying, false);
+  assert.equal(enemy.balloonPopped, true);
+  assert.equal(enemy.health, enemy.maxHealth / 2);
+  assert.ok(enemy.vy > 0);
+  assert.equal(state.enemies.length, 1);
+});
+
+test("platform zombies move toward an edge when Dave is underneath", () => {
+  const state = createGameState("level");
+  const platform = WORLD.platforms[0];
+  const enemy = createEnemy("normal", platform.x + platform.w / 2, platform.y);
+  enemy.y = platform.y - enemy.h;
+  enemy.onGround = true;
+  state.player.x = platform.x + platform.w / 2 - state.player.w / 2;
+  state.player.y = WORLD.groundY - state.player.h;
+  state.enemies.push(enemy);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(enemy.descendingToPlayer, true);
+  assert.ok(Math.abs(enemy.vx) > 0);
+});
+
+test("platform zombies step off the edge instead of sticking above Dave", () => {
+  const state = createGameState("level");
+  const platform = WORLD.platforms[0];
+  const enemy = createEnemy("normal", platform.x + 3, platform.y);
+  enemy.y = platform.y - enemy.h;
+  enemy.onGround = true;
+  state.player.x = platform.x + platform.w / 2;
+  state.player.y = WORLD.groundY - state.player.h;
+  state.enemies.push(enemy);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(enemy.onGround, false);
+  assert.ok(enemy.vy > 0);
+});
+
+test("slimes hop with increasing jump height and damage tiers", () => {
+  const state = createGameState("level");
+  configureLevel(state, 1);
+  const low = createEnemy("slimeLow", 600, WORLD.groundY);
+  const mid = createEnemy("slimeMid", 660, WORLD.groundY);
+  const high = createEnemy("slimeHigh", 720, WORLD.groundY);
+  state.player.x = 1200;
+  state.enemies.push(low, mid, high);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(low.vy < 0);
+  assert.ok(mid.vy < low.vy);
+  assert.ok(high.vy < mid.vy);
+  assert.ok(low.damage < mid.damage);
+  assert.ok(mid.damage < high.damage);
+});
+
+test("slimes keep jumping again after being knocked back", () => {
+  const state = createGameState("level");
+  const slime = createEnemy("slimeMid", 700, WORLD.groundY);
+  slime.vx = -500;
+  slime.vy = 0;
+  slime.onGround = true;
+  state.player.x = 1200;
+  state.enemies.push(slime);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(slime.vy < 0);
+});
+
 test("balloon mode waits for next-level button after five balloon kills", () => {
   const state = createGameState("balloon");
   configureBalloonLevel(state, 1);
@@ -722,6 +1186,170 @@ test("restarting balloon mode after timeout keeps the current balloon level", ()
   assert.equal(state.enemies.length, 5);
 });
 
+test("recordHighScore keeps the best score reached", () => {
+  const state = createGameState("endless");
+  state.score = 120;
+
+  assert.equal(recordHighScore(state, 90), 120);
+  state.score = 80;
+  assert.equal(recordHighScore(state, 120), 120);
+});
+
+test("shield door zombies do not use ranged attacks while keeping melee contact damage", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", state.player.x + 260, state.player.y);
+  enemy.rangedCooldown = 0;
+  state.enemies.push(enemy);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemyProjectiles.length, 0);
+  assert.equal(enemy.damage > 0, true);
+});
+
+test("shield door blocks one frontal stock hit before taking stock damage", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", state.player.x + state.player.w + 18, state.player.y);
+  enemy.facing = -1;
+  state.enemies.push(enemy);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 1);
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(enemy.shieldBroken, true);
+
+  state.player.stockCooldown = 0;
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth / 2);
+});
+
+test("shield door blocks a full frontal shotgun blast once", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", 250, state.player.y);
+  enemy.facing = -1;
+  state.enemies.push(enemy);
+
+  for (let index = 0; index < SHOTGUN.pelletCount; index += 1) {
+    state.pellets.push({
+      x: enemy.x + enemy.w / 2,
+      y: enemy.y + enemy.h / 2,
+      vx: 900,
+      vy: 0,
+      life: 1,
+      radius: SHOTGUN.pelletRadius,
+      damage: 20,
+      damageFalloff: 1,
+      weapon: "shotgun",
+      shotId: 777,
+      piercesRemaining: 0,
+      hitEnemyIds: [],
+    });
+  }
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(enemy.shieldBroken, true);
+  assert.equal(state.pellets.length, 0);
+
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: SHOTGUN.pelletRadius,
+    damage: 12,
+    damageFalloff: 1,
+    weapon: "shotgun",
+    shotId: 778,
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth - 12);
+});
+
+test("shield door blocks three frontal rifle bullets before breaking", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", 250, state.player.y);
+  enemy.facing = -1;
+  state.enemies.push(enemy);
+
+  for (let index = 0; index < 3; index += 1) {
+    state.pellets.push({
+      x: enemy.x + enemy.w / 2,
+      y: enemy.y + enemy.h / 2,
+      vx: 900,
+      vy: 0,
+      life: 1,
+      radius: 4,
+      damage: 10,
+      damageFalloff: 1,
+      weapon: "rifle",
+      piercesRemaining: 0,
+      hitEnemyIds: [],
+    });
+    applyPelletHits(state);
+  }
+
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(enemy.shieldBroken, true);
+
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 4,
+    damage: 10,
+    damageFalloff: 1,
+    weapon: "rifle",
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth - 10);
+});
+
+test("shield door only blocks attacks from the front", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("fat", 250, state.player.y);
+  enemy.facing = 1;
+  state.enemies.push(enemy);
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 4,
+    damage: 10,
+    damageFalloff: 1,
+    weapon: "rifle",
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth - 10);
+  assert.equal(enemy.shieldBroken, false);
+});
+
 test("enemy contact knocks Dave away from the attacker", () => {
   const state = createGameState("level");
   const enemy = createEnemy("normal", state.player.x + state.player.w - 4, state.player.y);
@@ -736,6 +1364,42 @@ test("enemy contact knocks Dave away from the attacker", () => {
 
   assert.ok(state.player.vx < -150);
   assert.ok(state.player.vy < 0);
+});
+
+test("stacked zombies can only deal one contact hit during Dave's damage cooldown", () => {
+  const state = createGameState("endless");
+  state.player.health = 100;
+  state.enemies.push(createEnemy("normal", state.player.x, state.player.y));
+  state.enemies.push(createEnemy("fat", state.player.x, state.player.y));
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.player.health, 88);
+  assert.ok(state.player.damageCooldown > 0);
+});
+
+test("shooting gives Dave a brief same-frame guard against contact damage", () => {
+  const state = createGameState("endless");
+  state.player.health = 10;
+  state.player.regenDelay = 5;
+  state.player.regenStartHealth = 10;
+  state.enemies.push(createEnemy("normal", state.player.x, state.player.y));
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: -1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: true, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.status, "playing");
+  assert.equal(state.player.health, 10);
+  assert.ok(state.player.damageCooldown > 0);
 });
 
 test("V2 uses fewer shotgun pellets and Chinese power-up labels", () => {
@@ -766,6 +1430,7 @@ test("new game state includes corpses floating texts and next-level flow flags",
 
   assert.deepEqual(state.corpses, []);
   assert.deepEqual(state.floatTexts, []);
+  assert.deepEqual(state.permanentPowerUps, {});
   assert.equal(state.awaitingNextLevel, false);
   assert.equal(state.pendingBoss, false);
 });
@@ -781,8 +1446,8 @@ test("picking up a power-up creates a Chinese floating pickup message", () => {
     1 / 60,
   );
 
-  assert.equal(state.activePowerUps.piercing > 0, true);
-  assert.equal(state.floatTexts.some((text) => text.text === "获得：穿透弹"), true);
+  assert.equal(state.permanentPowerUps.piercing, 1);
+  assert.equal(state.floatTexts.some((text) => text.text.includes("永久强化：穿透弹")), true);
 });
 
 test("running stock-killed non-boss enemies become flying corpses for five seconds", () => {
@@ -800,7 +1465,7 @@ test("running stock-killed non-boss enemies become flying corpses for five secon
   assert.ok(state.corpses[0].vy < 0);
 });
 
-test("pellets can hit corpses before they fade out", () => {
+test("pellets knock corpses away while continuing through them", () => {
   const state = createGameState("level");
   const corpse = {
     id: "corpse-test",
@@ -816,6 +1481,9 @@ test("pellets can hit corpses before they fade out", () => {
     spin: 0,
   };
   state.corpses.push(corpse);
+  const enemy = createEnemy("normal", corpse.x + 18, corpse.y);
+  enemy.health = 10;
+  state.enemies.push(enemy);
   state.pellets.push({
     x: corpse.x + corpse.w / 2,
     y: corpse.y + corpse.h / 2,
@@ -823,13 +1491,15 @@ test("pellets can hit corpses before they fade out", () => {
     vy: 0,
     life: 1,
     radius: 6,
+    damage: 10,
   });
 
   applyPelletHits(state);
 
   assert.equal(state.pellets.length, 0);
-  assert.equal(state.corpses.length, 1);
-  assert.equal(state.kills, 0);
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.corpses.length, 2);
+  assert.equal(state.kills, 1);
   assert.equal(state.corpses[0].life, 4.2);
   assert.ok(state.corpses[0].vx > 180);
   assert.ok(state.corpses[0].vy < 0);
@@ -900,31 +1570,34 @@ test("advanceToNextLevel returns player to spawn and starts the next level", () 
   assert.ok(state.enemies.length > 0);
 });
 
-test("advancing after level fifteen completes level mode instead of starting level sixteen", () => {
+test("advancing after level one hundred completes level mode instead of starting level one hundred one", () => {
   const state = createGameState("level");
-  state.level = 15;
+  state.level = 100;
   state.awaitingNextLevel = true;
-  state.nextLevel = 16;
+  state.nextLevel = 101;
 
   const advanced = advanceToNextLevel(state);
 
   assert.equal(advanced, true);
   assert.equal(state.status, "victory");
-  assert.equal(state.level, 15);
+  assert.equal(state.level, 100);
   assert.equal(state.awaitingNextLevel, false);
   assert.equal(state.enemies.length, 0);
 });
 
-test("boss levels are removed and clearing level three opens extraction", () => {
-  const state = createGameState("level");
-  configureLevel(state, 3);
+test("boss levels spawn a far-away boss only after smaller enemies are cleared", () => {
+  const state = createGameState("level", "rifle");
+  configureLevel(state, 5);
   spawnLevelEnemies(state);
 
+  assert.equal(state.weapon, "shotgun");
+  assert.equal(state.pendingBoss, true);
   assert.equal(state.enemies.some((enemy) => enemy.isBoss), false);
-  assert.equal(state.pendingBoss, false);
 
+  state.player.x = 1450;
   state.enemies = [];
   state.kills = state.requiredKills;
+
   updateGame(
     state,
     { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
@@ -932,6 +1605,262 @@ test("boss levels are removed and clearing level three opens extraction", () => 
     1 / 60,
   );
 
-  assert.equal(state.enemies.some((enemy) => enemy.isBoss), false);
+  const boss = state.enemies.find((enemy) => enemy.isBoss);
+  assert.ok(boss);
+  assert.ok(Math.abs(boss.x - state.player.x) >= 560);
+});
+
+test("boss clears ask for the next weapon before continuing", () => {
+  const state = createGameState("level");
+  configureLevel(state, 5);
+  state.pendingBoss = false;
+  state.bossSpawned = true;
+  state.enemies = [];
+  state.kills = state.requiredKills + 1;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.awaitingWeaponChoice, true);
+  assert.equal(state.extraction.active, false);
+
+  choosePostBossWeapon(state, "rifle", "auto");
+
+  assert.equal(state.weapon, "rifle");
+  assert.equal(state.rifleMode, "auto");
   assert.equal(state.extraction.active, true);
+});
+
+test("boss levels show a forced shotgun warning beside Dave", () => {
+  const state = createGameState("level", "rifle");
+
+  configureLevel(state, 5);
+
+  assert.equal(state.weapon, "shotgun");
+  assert.ok(state.floatTexts.some((text) => text.text.includes("强制霰弹枪")));
+  assert.ok(state.floatTexts.some((text) => Math.abs(text.x - (state.player.x + state.player.w / 2)) < 1));
+});
+
+test("zombies drop only permanent buffs every twenty kills", () => {
+  const state = createGameState("level");
+  state.kills = 19;
+  state.player.health = 40;
+  state.enemies = [createEnemy("normal", 620, WORLD.groundY)];
+  state.enemies[0].health = 0;
+
+  applyPelletHits(state, 1 / 60);
+
+  assert.equal(state.kills, 20);
+  assert.equal(state.pickups.length, 1);
+  assert.notEqual(state.pickups[0].id, "health");
+});
+
+test("picked up buffs become permanent upgrades instead of timed buffs", () => {
+  const state = createGameState("level");
+  spawnPowerUp(state, "piercing", state.player.x, state.player.y);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.pickups.length, 0);
+  assert.equal(state.permanentPowerUps.piercing, 1);
+  assert.equal(state.activePowerUps.piercing, undefined);
+});
+
+test("permanent piercing improves bullet damage after piercing", () => {
+  const state = createGameState("level", "rifle");
+  state.permanentPowerUps.piercing = 1;
+  state.player.ammo = 30;
+
+  fireShotgun(state, { x: 1, y: 0 });
+
+  assert.equal(state.pellets[0].piercesRemaining, 1);
+  assert.equal(state.pellets[0].damageFalloff, RIFLE.pierceDamageMultiplier + 0.5);
+});
+
+test("endless mode clears permanent buffs when Dave dies", () => {
+  const state = createGameState("endless");
+  state.permanentPowerUps.piercing = 2;
+  state.player.health = 5;
+  state.player.regenDelay = 10;
+  state.player.regenStartHealth = 5;
+  state.enemyProjectiles.push({
+    x: state.player.x + 10,
+    y: state.player.y + 10,
+    w: 12,
+    h: 12,
+    vx: 0,
+    vy: 0,
+    damage: 10,
+    life: 1,
+  });
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.status, "gameover");
+  assert.deepEqual(state.permanentPowerUps, {});
+});
+
+test("endless boss waves wait for small zombies, then hold the wave until the boss dies", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+  state.wave = 20;
+  state.spawnTimer = 0;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.wave, 20);
+  assert.equal(state.pendingEndlessBoss, true);
+  assert.equal(state.enemies.some((enemy) => enemy.isBoss), false);
+
+  state.enemies = [];
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  const boss = state.enemies.find((enemy) => enemy.isBoss);
+  assert.ok(boss);
+  assert.equal(state.wave, 20);
+
+  boss.health = 0;
+  applyPelletHits(state, 1 / 60);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.wave, 21);
+  assert.equal(state.endlessBossActive, false);
+});
+
+test("endless mode waits ten seconds after every three cleared waves", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+  state.wave = 4;
+  state.spawnTimer = 0;
+  state.endlessWavesSinceBreak = 3;
+  state.enemies = [];
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemies.length, 0);
+  assert.ok(state.spawnTimer >= 9.9);
+  assert.equal(state.endlessWavesSinceBreak, 0);
+});
+
+test("endless bosses call in two random small zombies every ten seconds", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+  const boss = createEnemy("tankBoss", 1200, WORLD.groundY);
+  state.enemies = [boss];
+  state.endlessBossActive = true;
+  state.bossAddTimer = 0;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemies.filter((enemy) => !enemy.isBoss).length, 2);
+  assert.ok(state.bossAddTimer > 9.9);
+});
+
+test("ranged boss projectiles are red", () => {
+  const state = createGameState("level");
+  const boss = createEnemy("rangedBoss", state.player.x + 260, state.player.y);
+  boss.rangedCooldown = 0;
+  state.enemies = [boss];
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemyProjectiles.length, 1);
+  assert.equal(state.enemyProjectiles[0].color, "#d7263d");
+});
+
+test("enemy projectiles knock Dave back when they hit", () => {
+  const state = createGameState("level");
+  const player = state.player;
+  player.damageCooldown = 0;
+  state.enemyProjectiles.push({
+    x: player.x,
+    y: player.y + player.h / 2,
+    w: 12,
+    h: 12,
+    vx: 520,
+    vy: 0,
+    damage: 16,
+    life: 3.2,
+    color: "#d7263d",
+  });
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(player.health, player.maxHealth - 16);
+  assert.ok(player.vx > 0);
+  assert.ok(player.vy < 0);
+});
+
+test("endless mode separates walls from platforms", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+
+  for (const wall of WORLD.walls) {
+    for (const platform of WORLD.platforms) {
+      const overlap =
+        wall.x < platform.x + platform.w &&
+        wall.x + wall.w > platform.x &&
+        wall.y < platform.y + platform.h &&
+        wall.y + wall.h > platform.y;
+
+      assert.equal(overlap, false);
+    }
+  }
+});
+
+test("menu explains balloon mode uses pistol and ignores shotgun and rifle settings", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+  assert.match(html, /打气球模式：手枪/);
+  assert.match(html, /不受霰弹枪和步枪影响/);
 });

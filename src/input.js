@@ -22,6 +22,7 @@ export function createInput(canvas) {
     right: false,
     jumpPressed: false,
     shootPressed: false,
+    shootHeld: false,
     stockPressed: false,
     doubleShotPressed: false,
     lastShootPressedAt: -Infinity,
@@ -52,6 +53,7 @@ export function createInput(canvas) {
     const now = performance.now();
 
     if (event.button === 0) {
+      input.shootHeld = true;
       input.shootPressed = true;
       input.lastShootPressedAt = now;
 
@@ -73,6 +75,12 @@ export function createInput(canvas) {
       }
     }
   });
+  canvas.addEventListener("pointerup", (event) => {
+    if (event.button === 0) input.shootHeld = false;
+  });
+  canvas.addEventListener("pointerleave", () => {
+    input.shootHeld = false;
+  });
   canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
   return input;
@@ -82,6 +90,7 @@ export function consumePressed(input) {
   const pressed = {
     jumpPressed: input.jumpPressed,
     shootPressed: input.shootPressed,
+    shootHeld: input.shootHeld,
     stockPressed: input.stockPressed,
     doubleShotPressed: input.doubleShotPressed,
   };

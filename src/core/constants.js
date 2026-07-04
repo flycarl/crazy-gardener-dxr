@@ -4,6 +4,7 @@ export const WORLD = {
   groundY: 590,
   gravity: 2200,
   gaps: [],
+  walls: [],
   platforms: [
     { x: 690, y: 500, w: 230, h: 24 },
     { x: 1320, y: 470, w: 270, h: 24 },
@@ -47,12 +48,15 @@ export const PISTOL = {
 export const RIFLE = {
   magazineSize: 30,
   reloadSeconds: 1.55,
-  cooldownSeconds: 0.08,
+  cooldownSeconds: 0.22,
+  autoCooldownSeconds: 0.16,
   bulletSpeed: 1320,
   bulletRadius: 4,
   bulletLife: 0.86,
-  damage: 28,
+  damage: 24,
+  autoDamage: 10,
   pierceDamageMultiplier: 0.5,
+  airRecoil: 145,
 };
 
 export const BALLOON_MODE = {
@@ -63,12 +67,16 @@ export const BALLOON_MODE = {
 export const ENEMY_TYPES = {
   normal: { label: "普通僵尸", width: 42, height: 70, health: 32, speed: 68, damage: 12, score: 10 },
   fast: { label: "快跑僵尸", width: 38, height: 64, health: 20, speed: 124, damage: 10, score: 15 },
-  fat: { label: "胖僵尸", width: 58, height: 82, health: 68, speed: 52, damage: 18, score: 25 },
+  fat: { label: "防爆门僵尸", width: 58, height: 82, health: 68, speed: 52, damage: 18, score: 25, shield: true },
+  slimeLow: { label: "小跳史莱姆", width: 42, height: 42, health: 24, speed: 78, damage: 10, score: 18, slime: true, jumpVelocity: 560 },
+  slimeMid: { label: "中跳史莱姆", width: 48, height: 48, health: 34, speed: 92, damage: 16, score: 28, slime: true, jumpVelocity: 760 },
+  slimeHigh: { label: "高跳史莱姆", width: 54, height: 54, health: 46, speed: 104, damage: 24, score: 42, slime: true, jumpVelocity: 980 },
   balloon: { label: "气球僵尸", width: 40, height: 62, health: 24, speed: 58, damage: 10, score: 20, flying: true },
-  tankBoss: { label: "巨型肉盾 Boss", width: 128, height: 150, health: 560, speed: 34, damage: 25, score: 300 },
+  tankBoss: { label: "冲锋 Boss", width: 118, height: 142, health: 620, speed: 78, damage: 26, score: 300 },
+  rangedBoss: { label: "远程 Boss", width: 104, height: 132, health: 460, speed: 44, damage: 18, score: 320, ranged: true },
 };
 
-export const LEVELS = [
+const BASE_LEVELS = [
   {
     enemies: ["normal", "normal", "balloon", "fast", "normal"],
     platforms: [
@@ -103,6 +111,7 @@ export const LEVELS = [
   },
   {
     enemies: ["normal", "fast", "fat", "normal", "balloon", "fast", "normal", "fat", "normal"],
+    boss: "tankBoss",
     platforms: [
       { x: 560, y: 500, w: 205, h: 24 },
       { x: 1030, y: 455, w: 220, h: 24 },
@@ -154,6 +163,7 @@ export const LEVELS = [
   },
   {
     enemies: ["normal", "fast", "fat", "balloon", "normal", "fast", "fat", "normal", "balloon", "fast", "fat", "normal", "balloon", "normal"],
+    boss: "rangedBoss",
     platforms: [
       { x: 470, y: 500, w: 175, h: 24 },
       { x: 800, y: 425, w: 180, h: 24 },
@@ -216,6 +226,7 @@ export const LEVELS = [
   },
   {
     enemies: ["normal", "fast", "fat", "balloon", "normal", "fast", "fat", "normal", "balloon", "fast", "fat", "normal", "balloon", "normal", "fast", "fat", "balloon", "normal", "fat"],
+    boss: "tankBoss",
     platforms: [
       { x: 420, y: 500, w: 160, h: 24 },
       { x: 680, y: 400, w: 162, h: 24 },
@@ -229,6 +240,44 @@ export const LEVELS = [
     ],
   },
 ];
+
+const LEVEL_ENEMY_RAMP = ["normal", "fast", "fat", "balloon", "slimeLow", "normal", "slimeMid", "fast", "fat", "slimeHigh"];
+const EXTRA_PLATFORM_PATTERN = [
+  { x: 3520, y: 440, w: 72, h: 24 },
+  { x: 300, y: 450, w: 118, h: 24 },
+  { x: 2620, y: 372, w: 132, h: 24 },
+];
+
+function createLevelPlan(index) {
+  const levelNumber = index + 1;
+  const base = BASE_LEVELS[Math.min(index, BASE_LEVELS.length - 1)];
+  const extraCount = Math.floor(index / 5);
+  const enemies = [...base.enemies];
+
+  for (let extraIndex = 0; extraIndex < extraCount; extraIndex += 1) {
+    enemies.push(LEVEL_ENEMY_RAMP[(index + extraIndex) % LEVEL_ENEMY_RAMP.length]);
+  }
+
+  const platforms = base.platforms.map((platform, platformIndex) => ({
+    ...platform,
+    y: Math.max(360, platform.y - Math.min(46, Math.floor(index / 10) * 4 + (platformIndex % 2) * 4)),
+  }));
+
+  for (let platformIndex = 0; platformIndex < Math.min(3, Math.floor(index / 25)); platformIndex += 1) {
+    platforms.push({
+      ...EXTRA_PLATFORM_PATTERN[platformIndex],
+      y: Math.max(350, EXTRA_PLATFORM_PATTERN[platformIndex].y - Math.floor(index / 20) * 5),
+    });
+  }
+
+  return {
+    enemies,
+    platforms,
+    ...(levelNumber % 5 === 0 ? { boss: levelNumber % 10 === 0 ? "rangedBoss" : "tankBoss" } : {}),
+  };
+}
+
+export const LEVELS = Array.from({ length: 100 }, (_, index) => createLevelPlan(index));
 
 export const POWER_UPS = {
   piercing: { label: "穿透弹", duration: 10 },
