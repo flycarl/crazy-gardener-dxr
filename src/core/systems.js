@@ -165,6 +165,21 @@ function popBalloon(state, enemy, pellet) {
   addFloatText(state, "气球爆了", enemy.x + enemy.w / 2, enemy.y - 42, "#ef476f");
 }
 
+function dropRandomPermanentBuffOnDeath(state) {
+  const entries = Object.entries(state.permanentPowerUps ?? {}).filter(([, count]) => count > 0);
+  if (entries.length === 0) {
+    return null;
+  }
+
+  const [id, count] = entries[Math.floor(Math.random() * entries.length)];
+  if (count <= 1) {
+    delete state.permanentPowerUps[id];
+  } else {
+    state.permanentPowerUps[id] = count - 1;
+  }
+  return id;
+}
+
 function damagePlayer(state, amount) {
   const player = state.player;
   if ((player.damageCooldown ?? 0) > 0) {
@@ -186,6 +201,8 @@ function damagePlayer(state, amount) {
     if (state.mode === "endless") {
       state.activePowerUps = {};
       state.permanentPowerUps = {};
+    } else if (state.mode === "level") {
+      dropRandomPermanentBuffOnDeath(state);
     }
   }
 

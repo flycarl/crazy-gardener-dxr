@@ -2010,6 +2010,42 @@ test("endless mode clears permanent buffs when Dave dies", () => {
   assert.deepEqual(state.permanentPowerUps, {});
 });
 
+test("level mode death randomly drops one permanent buff stack", () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const state = createGameState("level");
+    state.permanentPowerUps.piercing = 2;
+    state.permanentPowerUps.wide = 1;
+    state.player.health = 5;
+    state.player.regenDelay = 10;
+    state.player.regenStartHealth = 5;
+    state.enemyProjectiles.push({
+      x: state.player.x + 10,
+      y: state.player.y + 10,
+      w: 12,
+      h: 12,
+      vx: 0,
+      vy: 0,
+      damage: 10,
+      life: 1,
+    });
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.status, "gameover");
+    assert.equal(state.permanentPowerUps.piercing, 1);
+    assert.equal(state.permanentPowerUps.wide, 1);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test("endless boss waves wait for small zombies, then hold the wave until the boss dies", () => {
   const state = createGameState("endless");
   configureEndlessMode(state);
@@ -2160,4 +2196,23 @@ test("menu explains balloon mode uses pistol and ignores shotgun and rifle setti
 
   assert.match(html, /打气球模式：手枪/);
   assert.match(html, /不受霰弹枪和步枪影响/);
+});
+
+test("page includes an in-game pause menu with resume and main menu actions", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+
+  assert.match(html, /id="pauseMenuButton"/);
+  assert.match(html, /id="resumeButton"/);
+  assert.match(html, /id="pauseMainMenuButton"/);
+  assert.match(html, />继续</);
+  assert.match(html, />主菜单</);
+});
+
+test("hud styles promote red health hearts and a left-side stats column", () => {
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.health-heart\.filled/);
+  assert.match(css, /#e52f39/);
+  assert.match(css, /\.hud-stats/);
+  assert.match(css, /justify-items: start/);
 });

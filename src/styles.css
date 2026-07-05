@@ -94,23 +94,107 @@ button:focus-visible {
 
 .hud {
   position: absolute;
-  left: 16px;
-  right: 16px;
-  top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  left: 18px;
+  top: 14px;
+  display: grid;
+  justify-items: start;
+  gap: 10px;
   pointer-events: none;
 }
 
-.hud span {
+.health-meter {
+  display: flex;
+  gap: 3px;
+  min-height: 31px;
+  padding: 3px 8px 5px;
+  border: 2px solid rgba(255, 248, 215, 0.38);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.36);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.18);
+}
+
+.health-heart {
+  color: rgba(86, 39, 39, 0.7);
+  font-size: clamp(18px, 2.2vw, 26px);
+  line-height: 1;
+  -webkit-text-stroke: 1px rgba(48, 18, 18, 0.92);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.health-heart.filled {
+  color: #e52f39;
+}
+
+.hud-stats,
+.hud-status {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.hud-stats {
+  margin-left: 12px;
+}
+
+.hud-status {
+  margin-left: 28px;
+  opacity: 0.86;
+}
+
+.hud-stats span,
+.hud-status span {
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 6px;
   padding: 6px 9px;
   background: rgba(0, 0, 0, 0.35);
   font-size: 14px;
   line-height: 1.2;
+}
+
+.hud-stats span {
+  min-width: 128px;
+  border-color: rgba(244, 211, 94, 0.58);
+  background: rgba(16, 24, 16, 0.62);
+  color: #fff8d7;
+  font-weight: 800;
+}
+
+.hud-status span {
+  max-width: 220px;
+  font-size: 12px;
+}
+
+.pause-menu-button {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  z-index: 2;
+  min-width: 84px;
+  padding: 9px 14px;
+  border-color: rgba(255, 248, 215, 0.76);
+  background: rgba(48, 83, 41, 0.92);
+}
+
+.pause-panel {
+  position: absolute;
+  right: 18px;
+  top: 64px;
+  z-index: 3;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+  min-width: 230px;
+  border: 2px solid rgba(244, 211, 94, 0.9);
+  border-radius: 8px;
+  padding: 18px;
+  background: rgba(13, 25, 15, 0.9);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+}
+
+.pause-title {
+  color: #fff8d7;
+  font-size: 24px;
+  font-weight: 800;
 }
 
 .next-level-panel {

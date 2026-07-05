@@ -19,6 +19,10 @@ const failurePanel = document.querySelector("#failurePanel");
 const failureTitle = document.querySelector(".failure-title");
 const retryButton = document.querySelector("#retryButton");
 const mainMenuButton = document.querySelector("#mainMenuButton");
+const pauseMenuButton = document.querySelector("#pauseMenuButton");
+const pausePanel = document.querySelector("#pausePanel");
+const resumeButton = document.querySelector("#resumeButton");
+const pauseMainMenuButton = document.querySelector("#pauseMainMenuButton");
 const rifleToggle = document.querySelector("#rifleToggle");
 const rifleFireModeToggle = document.querySelector("#rifleFireModeToggle");
 const rifleModeHint = document.querySelector("#rifleModeHint");
@@ -29,6 +33,7 @@ let lastTime = performance.now();
 let selectedWeapon = "shotgun";
 let selectedRifleMode = "single";
 let highScore = Number(localStorage.getItem("crazyGardenerHighScore") ?? 0);
+let paused = false;
 
 function getAimDirection(currentState) {
   const player = currentState.player;
@@ -57,6 +62,10 @@ function start(mode) {
   menu.classList.add("hidden");
   nextLevelPanel.classList.add("hidden");
   failurePanel.classList.add("hidden");
+  pausePanel.classList.add("hidden");
+  pauseMenuButton.classList.remove("hidden");
+  pauseMenuButton.setAttribute("aria-expanded", "false");
+  paused = false;
 }
 
 function updateNextLevelPanel() {
@@ -110,10 +119,17 @@ function updateFailurePanel() {
 function updatePanels() {
   updateNextLevelPanel();
   updateFailurePanel();
+  pauseMenuButton.classList.toggle("hidden", !state || state.status === "gameover" || state.status === "victory");
+  if (!state || state.status === "gameover" || state.status === "victory" || state.awaitingNextLevel || state.awaitingWeaponChoice) {
+    paused = false;
+    pausePanel.classList.add("hidden");
+    pauseMenuButton.setAttribute("aria-expanded", "false");
+  }
 }
 
 function returnToMenu() {
   state = null;
+  paused = false;
   menu.classList.remove("hidden");
   nextLevelPanel.classList.add("hidden");
   nextLevelButton.classList.remove("hidden");
@@ -121,6 +137,22 @@ function returnToMenu() {
   postBossRifleModeChoices.classList.add("hidden");
   delete postBossRifleModeChoices.dataset.choosing;
   failurePanel.classList.add("hidden");
+  pausePanel.classList.add("hidden");
+  pauseMenuButton.classList.add("hidden");
+  pauseMenuButton.setAttribute("aria-expanded", "false");
+}
+
+function openPauseMenu() {
+  if (!state || state.status !== "playing") return;
+  paused = true;
+  pausePanel.classList.remove("hidden");
+  pauseMenuButton.setAttribute("aria-expanded", "true");
+}
+
+function closePauseMenu() {
+  paused = false;
+  pausePanel.classList.add("hidden");
+  pauseMenuButton.setAttribute("aria-expanded", "false");
 }
 
 function updateRifleToggle() {
@@ -148,8 +180,10 @@ function frame(now) {
 
     const pressed = consumePressed(input);
 
-    updateGame(state, input, pressed, dt);
-    saveHighScore();
+    if (!paused) {
+      updateGame(state, input, pressed, dt);
+      saveHighScore();
+    }
     updatePanels();
   }
 
@@ -223,5 +257,14 @@ retryButton.addEventListener("click", () => {
   }
 });
 mainMenuButton.addEventListener("click", returnToMenu);
+pauseMenuButton.addEventListener("click", () => {
+  if (paused) {
+    closePauseMenu();
+  } else {
+    openPauseMenu();
+  }
+});
+resumeButton.addEventListener("click", closePauseMenu);
+pauseMainMenuButton.addEventListener("click", returnToMenu);
 updateRifleToggle();
 requestAnimationFrame(frame);
