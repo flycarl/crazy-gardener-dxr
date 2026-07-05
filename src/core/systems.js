@@ -354,7 +354,7 @@ function fireRangedBossAttack(state, enemy, direction) {
   }
 
   const minShots = enraged ? 3 : 2;
-  const maxShots = enraged ? 5 : 3;
+  const maxShots = enraged ? 4 : 2;
   const shotCount = minShots + Math.floor(Math.random() * (maxShots - minShots + 1));
   const spread = 0.16;
 
@@ -390,6 +390,40 @@ function rotate(vector, radians) {
     x: vector.x * cos - vector.y * sin,
     y: vector.x * sin + vector.y * cos,
   };
+}
+
+function segmentIntersectsRect(x1, y1, x2, y2, rect, padding = 0) {
+  const minX = rect.x - padding;
+  const maxX = rect.x + rect.w + padding;
+  const minY = rect.y - padding;
+  const maxY = rect.y + rect.h + padding;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let tMin = 0;
+  let tMax = 1;
+
+  const clip = (p, q) => {
+    if (p === 0) return q >= 0;
+    const t = q / p;
+    if (p < 0) {
+      if (t > tMax) return false;
+      if (t > tMin) tMin = t;
+    } else {
+      if (t < tMin) return false;
+      if (t < tMax) tMax = t;
+    }
+    return true;
+  };
+
+  return clip(-dx, x1 - minX) && clip(dx, maxX - x1) && clip(-dy, y1 - minY) && clip(dy, maxY - y1);
+}
+
+function wallBlocksSegment(x1, y1, x2, y2, padding = 0) {
+  return WORLD.walls.some((wall) => segmentIntersectsRect(x1, y1, x2, y2, wall, padding));
+}
+
+function wallBlocksStockHit(player, enemy) {
+  return wallBlocksSegment(player.x + player.w / 2, player.y + player.h / 2, enemy.x + enemy.w / 2, enemy.y + enemy.h / 2);
 }
 
 function updateTimers(player, dt) {
@@ -900,7 +934,22 @@ export function applyPelletHits(state) {
     pellet.hitEnemyIds ??= [];
     pellet.piercesRemaining ??= hasPower(state, "piercing") ? 1 : 0;
 
+    if (
+      wallBlocksSegment(
+        pellet.previousX ?? pellet.x - pellet.vx * 0.018,
+        pellet.previousY ?? pellet.y - pellet.vy * 0.018,
+        pellet.x,
+        pellet.y,
+        pellet.radius ?? 0,
+      )
+    ) {
+      pellet.life = 0;
+      keepPellet = false;
+      state.effects.push(makeEffect(pellet.x, pellet.y, "#a85d3c", 0.16, 10));
+    }
+
     for (const corpse of state.corpses) {
+      if (!keepPellet) break;
       if (!circleRectOverlap(pellet.x, pellet.y, pellet.radius, corpse)) {
         continue;
       }
@@ -909,7 +958,7 @@ export function applyPelletHits(state) {
     }
 
     const hitBalloons = state.enemies.filter(
-      (enemy) => enemy.health > 0 && !pellet.hitEnemyIds.includes(enemy.id) && pelletHitsBalloon(pellet, enemy),
+      (enemy) => keepPellet && enemy.health > 0 && !pellet.hitEnemyIds.includes(enemy.id) && pelletHitsBalloon(pellet, enemy),
     );
 
     if (hitBalloons.length > 0) {
@@ -1582,7 +1631,7 @@ export function applyStockHits(state) {
   }
 
   for (const enemy of state.enemies) {
-    if (enemy.lastStockSwingId === player.stockSwingId || !rectsOverlap(hitbox, enemy)) {
+    if (enemy.lastStockSwingId === player.stockSwingId || !rectsOverlap(hitbox, enemy) || wallBlocksStockHit(player, enemy)) {
       continue;
     }
 
@@ -1598,7 +1647,7 @@ export function applyStockHits(state) {
     } else if (attackHitsShieldFront(enemy, player.facing)) {
       enemy.shieldBroken = true;
       blockShieldHit(state, enemy, enemy.x + enemy.w / 2, enemy.y + enemy.h / 2);
-    } else if (Math.abs(player.vx) >= STOCK_RUN_KILL_SPEED || enemy.health <= enemy.maxHealth / 2) {
+    } else if ((enemy.isSlime && enemy.health <= enemy.maxHealth / 2) || (!enemy.isSlime && (Math.abs(player.vx) >= STOCK_RUN_KILL_SPEED || enemy.health <= enemy.maxHealth / 2))) {
       state.corpses.push(createCorpseFromEnemy(enemy, player.facing));
       enemy.health = 0;
       state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#fff8d7", 0.24, 26));

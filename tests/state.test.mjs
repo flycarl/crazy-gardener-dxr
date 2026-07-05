@@ -290,6 +290,60 @@ test("one bullet damages all zombies that are overlapping at the hit point", () 
   assert.equal(secondEnemy.health, secondEnemy.maxHealth - 8);
 });
 
+test("bullets can hit enemies through platforms", () => {
+  const state = createGameState("level");
+  configureLevel(state, 1);
+  const platform = WORLD.platforms[0];
+  const enemy = createEnemy("normal", platform.x + platform.w / 2, platform.y - 90);
+  state.enemies.push(enemy);
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    previousX: enemy.x + enemy.w / 2,
+    previousY: platform.y + platform.h + 40,
+    vx: 0,
+    vy: -900,
+    life: 1,
+    radius: 5,
+    damage: 8,
+    damageFalloff: 1,
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth - 8);
+});
+
+test("walls block bullets from hitting enemies behind them", () => {
+  const state = createGameState("level");
+  configureLevel(state, 4);
+  const wall = WORLD.walls[0];
+  const enemy = createEnemy("normal", wall.x + wall.w + 20, wall.y + wall.h);
+  enemy.y = wall.y + wall.h - enemy.h;
+  state.enemies.push(enemy);
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    previousX: wall.x - 80,
+    previousY: enemy.y + enemy.h / 2,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 5,
+    damage: 20,
+    damageFalloff: 1,
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(state.pellets.length, 0);
+});
+
 test("five shotgun pellets kill a normal zombie when all pellets hit", () => {
   const state = createGameState("level");
   const enemy = createEnemy("normal", 250, state.player.y);
@@ -564,6 +618,26 @@ test("running stock swing kills a non-boss enemy in one hit", () => {
   assert.equal(state.enemies.length, 0);
   assert.equal(state.kills, 1);
   assert.equal(state.corpses.length, 1);
+});
+
+test("running stock swing still needs two hits to kill a slime", () => {
+  const state = createGameState("level");
+  const slime = createEnemy("slimeMid", state.player.x + state.player.w + 18, state.player.y);
+  state.player.vx = 430;
+  state.enemies.push(slime);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 1);
+  assert.equal(slime.health, slime.maxHealth / 2);
+
+  state.player.stockCooldown = 0;
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(state.enemies.length, 0);
+  assert.equal(state.kills, 1);
 });
 
 test("stock swing cannot damage bosses", () => {
@@ -1267,6 +1341,24 @@ test("shield door blocks one frontal stock hit before taking stock damage", () =
   assert.equal(enemy.health, enemy.maxHealth / 2);
 });
 
+test("walls block stock swings from hitting enemies behind them", () => {
+  const state = createGameState("level");
+  configureLevel(state, 4);
+  const wall = WORLD.walls[0];
+  const enemy = createEnemy("normal", wall.x + wall.w + 12, wall.y + wall.h);
+  enemy.y = wall.y + wall.h - enemy.h;
+  state.player.x = wall.x - state.player.w - 8;
+  state.player.y = enemy.y;
+  state.player.facing = 1;
+  state.enemies.push(enemy);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(enemy.stockHits ?? 0, 0);
+});
+
 test("shield door blocks a full frontal shotgun blast once", () => {
   const state = createGameState("level");
   const enemy = createEnemy("fat", 250, state.player.y);
@@ -1843,7 +1935,7 @@ test("ranged boss fires volleys and enrages into a ten shot ring under half heal
       1 / 60,
     );
 
-    assert.equal(state.enemyProjectiles.length, 5);
+    assert.equal(state.enemyProjectiles.length, 4);
   } finally {
     Math.random = originalRandom;
   }
