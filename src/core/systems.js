@@ -25,6 +25,7 @@ const REGEN_FILL_SECONDS = 3;
 const ENEMY_PROJECTILE_SPEED = 520;
 const ENEMY_RANGED_COOLDOWN = 2.8;
 const LEVEL_BOSS_ADD_SECONDS = 5;
+const LEVEL_BOSS_ADD_LIMIT = 3;
 const TANK_BOSS_CHARGE_DURATION = 0.64;
 const TANK_BOSS_CHARGE_MULTIPLIER = 4.25;
 const TANK_BOSS_CHARGE_SECONDS = 7;
@@ -618,8 +619,17 @@ function spawnBossAdds(state) {
 }
 
 function spawnLevelBossAdd(state) {
+  if ((state.levelBossAddsSpawned ?? 0) >= LEVEL_BOSS_ADD_LIMIT) {
+    return [];
+  }
+
   const type = BOSS_ADD_TYPES[Math.floor(Math.random() * BOSS_ADD_TYPES.length)];
-  return spawnEnemyList(state, [type], state.level + state.kills + state.enemies.length + 7);
+  const spawned = spawnEnemyList(state, [type], state.level + state.kills + state.enemies.length + 7);
+  for (const enemy of spawned) {
+    enemy.summonedByBoss = true;
+  }
+  state.levelBossAddsSpawned = (state.levelBossAddsSpawned ?? 0) + spawned.length;
+  return spawned;
 }
 
 function spawnPendingBoss(state) {
@@ -1013,7 +1023,7 @@ function updateLevelBookkeeping(state, dt) {
     return;
   }
 
-  if (state.bossAlive) {
+  if (state.bossAlive && (state.levelBossAddsSpawned ?? 0) < LEVEL_BOSS_ADD_LIMIT) {
     state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? LEVEL_BOSS_ADD_SECONDS) - dt);
     if (state.bossAddTimer === 0) {
       spawnLevelBossAdd(state);
@@ -1027,7 +1037,8 @@ function updateLevelBookkeeping(state, dt) {
     return;
   }
 
-  if (state.bossSpawned && !state.bossAlive && !state.awaitingWeaponChoice && state.level % 5 === 0) {
+  const summonedBossAddsAlive = state.enemies.some((enemy) => enemy.summonedByBoss);
+  if (state.bossSpawned && !state.bossAlive && !summonedBossAddsAlive && !state.awaitingWeaponChoice && state.level % 5 === 0) {
     state.awaitingWeaponChoice = true;
     return;
   }
@@ -1205,6 +1216,7 @@ export function configureLevel(state, level) {
   state.bossSpawned = false;
   state.bossAlive = false;
   state.bossAddTimer = LEVEL_BOSS_ADD_SECONDS;
+  state.levelBossAddsSpawned = 0;
   state.enemiesRemaining = 0;
   state.spawnTimer = 0;
   state.requiredKills = plan.enemies.length;

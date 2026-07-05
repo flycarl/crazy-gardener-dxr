@@ -1670,6 +1670,37 @@ test("boss clears ask for the next weapon before continuing", () => {
   assert.equal(state.extraction.active, true);
 });
 
+test("boss clears wait for summoned small zombies before asking for weapon choice", () => {
+  const state = createGameState("level");
+  configureLevel(state, 5);
+  const add = createEnemy("normal", 1200, WORLD.groundY);
+  add.summonedByBoss = true;
+  state.pendingBoss = false;
+  state.bossSpawned = true;
+  state.enemies = [add];
+  state.kills = state.requiredKills + 1;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.awaitingWeaponChoice, false);
+
+  add.health = 0;
+  applyPelletHits(state);
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.awaitingWeaponChoice, true);
+});
+
 test("boss levels show a forced shotgun warning beside Dave", () => {
   const state = createGameState("level", "rifle");
 
@@ -1698,8 +1729,32 @@ test("level bosses summon one random small zombie every five seconds", () => {
   );
 
   assert.equal(state.enemies.filter((enemy) => !enemy.isBoss).length, 1);
+  assert.equal(state.enemies.find((enemy) => !enemy.isBoss).summonedByBoss, true);
   assert.ok(state.bossAddTimer > 4.9);
   assert.equal(state.enemies.every((enemy) => enemy.isBoss || Math.abs(enemy.x - state.player.x) >= 520), true);
+});
+
+test("a level boss can summon at most three small zombies", () => {
+  const state = createGameState("level");
+  configureLevel(state, 5);
+  const boss = createEnemy("tankBoss", 1800, WORLD.groundY);
+  state.enemies = [boss];
+  state.bossAlive = true;
+  state.bossSpawned = true;
+  state.player.x = 400;
+
+  for (let index = 0; index < 5; index += 1) {
+    state.bossAddTimer = 0;
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+  }
+
+  assert.equal(state.enemies.filter((enemy) => enemy.summonedByBoss).length, 3);
+  assert.equal(state.levelBossAddsSpawned, 3);
 });
 
 test("configureLevel resets boss summon timer to five seconds after endless mode", () => {
