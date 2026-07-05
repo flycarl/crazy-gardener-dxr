@@ -7,7 +7,6 @@ const ENEMY_CONTACT_COOLDOWN = 0.75;
 const PLAYER_DAMAGE_COOLDOWN = 0.55;
 const SHOOT_GUARD_SECONDS = 0.16;
 const PELLET_DAMAGE = ENEMY_TYPES.normal.health / SHOTGUN.pelletCount;
-const BOSS_STOCK_DAMAGE = 72;
 const POWER_UP_DROP_INTERVAL = 20;
 const PERMANENT_POWER_INCREMENT = 0.5;
 const ENDLESS_MAX_ENEMIES = 15;
@@ -25,6 +24,11 @@ const REGEN_DELAY_SECONDS = 5;
 const REGEN_FILL_SECONDS = 3;
 const ENEMY_PROJECTILE_SPEED = 520;
 const ENEMY_RANGED_COOLDOWN = 2.8;
+const LEVEL_BOSS_ADD_SECONDS = 5;
+const TANK_BOSS_CHARGE_DURATION = 0.64;
+const TANK_BOSS_CHARGE_MULTIPLIER = 4.25;
+const TANK_BOSS_CHARGE_SECONDS = 7;
+const TANK_BOSS_ENRAGED_CHARGE_SECONDS = 5;
 const SHIELD_RIFLE_BLOCKS = 3;
 const BALLOON_HITS_TO_POP = 2;
 const ENDLESS_BREAK_SECONDS = 10;
@@ -317,10 +321,10 @@ function getWallAhead(enemy, directionX) {
   );
 }
 
-function fireEnemyProjectile(state, enemy) {
+function fireEnemyProjectile(state, enemy, directionOverride = null) {
   const enemyCenter = getRectCenter(enemy);
   const playerCenter = getPlayerCenter(state.player);
-  const direction = normalize(playerCenter.x - enemyCenter.x, playerCenter.y - enemyCenter.y);
+  const direction = directionOverride ?? normalize(playerCenter.x - enemyCenter.x, playerCenter.y - enemyCenter.y);
 
   state.enemyProjectiles.push({
     x: enemyCenter.x,
@@ -334,6 +338,29 @@ function fireEnemyProjectile(state, enemy) {
     color: "#d7263d",
   });
   state.effects.push(makeEffect(enemyCenter.x, enemyCenter.y, "#d7263d", 0.18, 12));
+}
+
+function fireRangedBossAttack(state, enemy, direction) {
+  const enraged = enemy.health <= enemy.maxHealth / 2;
+
+  if (enraged && !enemy.rangedEnraged) {
+    for (let index = 0; index < 10; index += 1) {
+      const angle = (Math.PI * 2 * index) / 10;
+      fireEnemyProjectile(state, enemy, { x: Math.cos(angle), y: Math.sin(angle) });
+    }
+    enemy.rangedEnraged = true;
+    return;
+  }
+
+  const minShots = enraged ? 3 : 2;
+  const maxShots = enraged ? 5 : 3;
+  const shotCount = minShots + Math.floor(Math.random() * (maxShots - minShots + 1));
+  const spread = 0.16;
+
+  for (let index = 0; index < shotCount; index += 1) {
+    const offset = index - (shotCount - 1) / 2;
+    fireEnemyProjectile(state, enemy, rotate(direction, offset * spread));
+  }
 }
 
 function respawnPlayerAfterFall(state) {
@@ -590,6 +617,11 @@ function spawnBossAdds(state) {
   return spawnEnemyList(state, enemyTypes, state.wave + state.kills + 11);
 }
 
+function spawnLevelBossAdd(state) {
+  const type = BOSS_ADD_TYPES[Math.floor(Math.random() * BOSS_ADD_TYPES.length)];
+  return spawnEnemyList(state, [type], state.level + state.kills + state.enemies.length + 7);
+}
+
 function spawnPendingBoss(state) {
   if (!state.pendingBoss || !state.pendingBossType) {
     return null;
@@ -627,6 +659,18 @@ function getStandingPlatform(rect) {
   return WORLD.platforms.find(
     (platform) => Math.abs(bottom - platform.y) <= 3 && rect.x + rect.w > platform.x && rect.x < platform.x + platform.w,
   );
+}
+
+function getPlatformOccupiedByPlayer(player) {
+  return getStandingPlatform(player);
+}
+
+function getPlatformClimbDirection(enemy, platform) {
+  const enemyCenterX = enemy.x + enemy.w / 2;
+  const distanceLeft = Math.abs(enemyCenterX - platform.x);
+  const distanceRight = Math.abs(enemyCenterX - (platform.x + platform.w));
+
+  return distanceLeft <= distanceRight ? -1 : 1;
 }
 
 function getPlatformEdgeDirection(enemy, player, platform) {
@@ -671,6 +715,52 @@ function updateSlimeHop(enemy, directionX) {
   return true;
 }
 
+function seekPlayerPlatform(enemy, player) {
+  if (!enemy.onGround) {
+    return false;
+  }
+
+  const platform = getPlatformOccupiedByPlayer(player);
+  if (!platform || enemy.y + enemy.h <= platform.y + 20) {
+    return false;
+  }
+
+  const enemyCenterX = enemy.x + enemy.w / 2;
+  const nearPlatform = enemyCenterX >= platform.x - 70 && enemyCenterX <= platform.x + platform.w + 70;
+  if (!nearPlatform) {
+    return false;
+  }
+
+  const direction = getPlatformClimbDirection(enemy, platform);
+  enemy.seekingPlatformEdge = true;
+  enemy.platformChoice = "climb";
+  enemy.vx = direction * Math.max(enemy.speed, 95);
+  enemy.vy = -780;
+  enemy.onGround = false;
+  return true;
+}
+
+function updateTankBossCharge(state, enemy, directionX, dt) {
+  enemy.chargeTimer = Math.max(0, (enemy.chargeTimer ?? 0) - dt);
+  enemy.chargeCooldown = Math.max(0, (enemy.chargeCooldown ?? TANK_BOSS_CHARGE_SECONDS) - dt);
+
+  if (enemy.chargeTimer > 0) {
+    enemy.vx = (enemy.chargeDirection || Math.sign(directionX || 1)) * enemy.speed * TANK_BOSS_CHARGE_MULTIPLIER;
+    return true;
+  }
+
+  if (enemy.chargeCooldown === 0) {
+    enemy.chargeDirection = Math.sign(directionX || 1);
+    enemy.chargeTimer = TANK_BOSS_CHARGE_DURATION;
+    enemy.chargeCooldown = enemy.health <= enemy.maxHealth / 2 ? TANK_BOSS_ENRAGED_CHARGE_SECONDS : TANK_BOSS_CHARGE_SECONDS;
+    enemy.vx = enemy.chargeDirection * enemy.speed * TANK_BOSS_CHARGE_MULTIPLIER;
+    state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#ff6b6b", 0.26, 28, { kind: "launch" }));
+    return true;
+  }
+
+  return false;
+}
+
 function updateEnemies(state, dt) {
   const player = state.player;
   const playerCenter = getPlayerCenter(player);
@@ -682,14 +772,15 @@ function updateEnemies(state, dt) {
     enemy.invulnerableTimer = Math.max(0, (enemy.invulnerableTimer ?? 0) - dt);
     enemy.rangedCooldown = Math.max(0, (enemy.rangedCooldown ?? 0) - dt);
     enemy.wallPauseTimer = Math.max(0, (enemy.wallPauseTimer ?? 0) - dt);
+    const charging = enemy.type === "tankBoss" ? updateTankBossCharge(state, enemy, direction.x, dt) : false;
 
     if (enemy.type === "rangedBoss" && enemy.rangedCooldown === 0 && Math.abs(playerCenter.x - enemyCenter.x) <= 640) {
-      fireEnemyProjectile(state, enemy);
+      fireRangedBossAttack(state, enemy, direction);
       enemy.rangedCooldown = ENEMY_RANGED_COOLDOWN;
     }
 
     if (state.mode !== "balloon") {
-      enemy.vx = enemy.wallPauseTimer > 0 ? 0 : direction.x * enemy.speed;
+      enemy.vx = charging ? enemy.vx : enemy.wallPauseTimer > 0 ? 0 : direction.x * enemy.speed;
       enemy.facing = direction.x < 0 ? -1 : 1;
     }
     enemy.onGround = Boolean(enemy.onGround ?? true);
@@ -729,11 +820,13 @@ function updateEnemies(state, dt) {
         enemy.descendingToPlayer = false;
       }
 
+      const seekingPlayerPlatform = seekPlayerPlatform(enemy, player);
+
       if (enemy.isSlime) {
         updateSlimeHop(enemy, moveDirection);
       }
 
-      if (approachingGap) {
+      if (!seekingPlayerPlatform && approachingGap) {
         enemy.vy = -760;
         enemy.onGround = false;
       }
@@ -742,7 +835,7 @@ function updateEnemies(state, dt) {
         enemy.platformChoice ??= Math.random() < 0.5 ? "ground" : "climb";
       }
 
-      if (climbPlatform && enemy.platformChoice === "climb") {
+      if (!seekingPlayerPlatform && climbPlatform && enemy.platformChoice === "climb") {
         enemy.vy = -820;
         enemy.onGround = false;
       }
@@ -912,12 +1005,21 @@ function removeDeadEnemies(state) {
   state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
 }
 
-function updateLevelBookkeeping(state) {
+function updateLevelBookkeeping(state, dt) {
   state.enemiesRemaining = state.enemies.length;
   state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
 
   if (state.mode !== "level" || state.awaitingNextLevel || state.extraction.active) {
     return;
+  }
+
+  if (state.bossAlive) {
+    state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? LEVEL_BOSS_ADD_SECONDS) - dt);
+    if (state.bossAddTimer === 0) {
+      spawnLevelBossAdd(state);
+      state.bossAddTimer = LEVEL_BOSS_ADD_SECONDS;
+      state.enemiesRemaining = state.enemies.length;
+    }
   }
 
   if (state.pendingBoss && state.enemiesRemaining === 0 && !state.bossAlive) {
@@ -1102,6 +1204,7 @@ export function configureLevel(state, level) {
   state.extraction.active = false;
   state.bossSpawned = false;
   state.bossAlive = false;
+  state.bossAddTimer = LEVEL_BOSS_ADD_SECONDS;
   state.enemiesRemaining = 0;
   state.spawnTimer = 0;
   state.requiredKills = plan.enemies.length;
@@ -1477,8 +1580,8 @@ export function applyStockHits(state) {
     enemy.x = clamp(enemy.x + player.facing * 56, 0, WORLD.width - enemy.w);
 
     if (enemy.isBoss) {
-      enemy.health = Math.max(1, enemy.health - BOSS_STOCK_DAMAGE);
       state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#d7263d", 0.24, 24));
+      addFloatText(state, "Boss免疫枪托", enemy.x + enemy.w / 2, enemy.y - 18, "#ffcf40");
       addSplatter(state, enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, player.facing, "#ffcf40", 12);
     } else if (attackHitsShieldFront(enemy, player.facing)) {
       enemy.shieldBroken = true;
@@ -1556,7 +1659,7 @@ export function updateGame(state, input, pressed, dt) {
   updateEffects(state, step);
   updateCorpses(state, step);
   updateFloatTexts(state, step);
-  updateLevelBookkeeping(state);
+  updateLevelBookkeeping(state, step);
   updateBalloonBookkeeping(state, step);
   const targetCameraX = clamp(player.x + player.w / 2 - 420, 0, Math.max(0, WORLD.width - 1280));
   state.cameraX += (targetCameraX - state.cameraX) * Math.min(1, step * 8);

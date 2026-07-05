@@ -566,6 +566,18 @@ test("running stock swing kills a non-boss enemy in one hit", () => {
   assert.equal(state.corpses.length, 1);
 });
 
+test("stock swing cannot damage bosses", () => {
+  const state = createGameState("level");
+  const boss = createEnemy("tankBoss", state.player.x + state.player.w + 18, state.player.y);
+  state.enemies.push(boss);
+
+  swingStock(state);
+  applyStockHits(state);
+
+  assert.equal(boss.health, boss.maxHealth);
+  assert.equal(state.enemies.length, 1);
+});
+
 test("stock swing has a longer short cooldown", () => {
   assert.ok(SHOTGUN.stockCooldownSeconds >= 0.6);
 });
@@ -1061,13 +1073,36 @@ test("platform zombies step off the edge instead of sticking above Dave", () => 
   assert.ok(enemy.vy > 0);
 });
 
+test("ground zombies seek a platform edge and jump up when Dave stands above them", () => {
+  const state = createGameState("level");
+  configureLevel(state, 1);
+  const platform = WORLD.platforms[0];
+  const enemy = createEnemy("normal", platform.x + platform.w / 2, WORLD.groundY);
+  enemy.onGround = true;
+  state.player.x = platform.x + platform.w / 2 - state.player.w / 2;
+  state.player.y = platform.y - state.player.h;
+  state.enemies.push(enemy);
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(enemy.seekingPlatformEdge, true);
+  assert.notEqual(enemy.vx, 0);
+  assert.ok(enemy.vy < 0);
+  assert.equal(enemy.onGround, false);
+});
+
 test("slimes hop with increasing jump height and damage tiers", () => {
   const state = createGameState("level");
   configureLevel(state, 1);
-  const low = createEnemy("slimeLow", 600, WORLD.groundY);
-  const mid = createEnemy("slimeMid", 660, WORLD.groundY);
-  const high = createEnemy("slimeHigh", 720, WORLD.groundY);
-  state.player.x = 1200;
+  const low = createEnemy("slimeLow", 1120, WORLD.groundY);
+  const mid = createEnemy("slimeMid", 1180, WORLD.groundY);
+  const high = createEnemy("slimeHigh", 1240, WORLD.groundY);
+  state.player.x = 1700;
   state.enemies.push(low, mid, high);
 
   updateGame(
@@ -1645,6 +1680,120 @@ test("boss levels show a forced shotgun warning beside Dave", () => {
   assert.ok(state.floatTexts.some((text) => Math.abs(text.x - (state.player.x + state.player.w / 2)) < 1));
 });
 
+test("level bosses summon one random small zombie every five seconds", () => {
+  const state = createGameState("level");
+  configureLevel(state, 5);
+  const boss = createEnemy("tankBoss", 1800, WORLD.groundY);
+  state.enemies = [boss];
+  state.bossAlive = true;
+  state.bossSpawned = true;
+  state.bossAddTimer = 0;
+  state.player.x = 400;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemies.filter((enemy) => !enemy.isBoss).length, 1);
+  assert.ok(state.bossAddTimer > 4.9);
+  assert.equal(state.enemies.every((enemy) => enemy.isBoss || Math.abs(enemy.x - state.player.x) >= 520), true);
+});
+
+test("configureLevel resets boss summon timer to five seconds after endless mode", () => {
+  const state = createGameState("endless");
+  configureEndlessMode(state);
+
+  configureLevel(state, 5);
+
+  assert.equal(state.bossAddTimer, 5);
+});
+
+test("tank boss charges every seven seconds and every five seconds under half health", () => {
+  const state = createGameState("level");
+  const boss = createEnemy("tankBoss", 1200, WORLD.groundY);
+  boss.chargeCooldown = 0;
+  state.enemies = [boss];
+  state.player.x = 400;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(Math.abs(boss.vx) > boss.speed * 3);
+  assert.ok(boss.chargeCooldown > 6.9);
+
+  boss.health = boss.maxHealth / 2 - 1;
+  boss.chargeCooldown = 0;
+  boss.chargeTimer = 0;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(Math.abs(boss.vx) > boss.speed * 3);
+  assert.ok(boss.chargeCooldown > 4.9);
+  assert.ok(boss.chargeCooldown < 5.1);
+});
+
+test("ranged boss fires volleys and enrages into a ten shot ring under half health", () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const state = createGameState("level");
+    const boss = createEnemy("rangedBoss", 900, WORLD.groundY);
+    boss.rangedCooldown = 0;
+    state.enemies = [boss];
+    state.player.x = 1280;
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.enemyProjectiles.length, 2);
+
+    state.enemyProjectiles = [];
+    boss.health = boss.maxHealth / 2 - 1;
+    boss.rangedCooldown = 0;
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.enemyProjectiles.length, 10);
+    assert.equal(boss.rangedEnraged, true);
+
+    Math.random = () => 0.99;
+    state.enemyProjectiles = [];
+    boss.rangedCooldown = 0;
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.enemyProjectiles.length, 5);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test("zombies drop only permanent buffs every twenty kills", () => {
   const state = createGameState("level");
   state.kills = 19;
@@ -1809,8 +1958,9 @@ test("ranged boss projectiles are red", () => {
     1 / 60,
   );
 
-  assert.equal(state.enemyProjectiles.length, 1);
-  assert.equal(state.enemyProjectiles[0].color, "#d7263d");
+  assert.ok(state.enemyProjectiles.length >= 2);
+  assert.ok(state.enemyProjectiles.length <= 3);
+  assert.equal(state.enemyProjectiles.every((projectile) => projectile.color === "#d7263d"), true);
 });
 
 test("enemy projectiles knock Dave back when they hit", () => {
