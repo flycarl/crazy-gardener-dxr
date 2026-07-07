@@ -31,7 +31,7 @@ const TANK_BOSS_CHARGE_MULTIPLIER = 4.25;
 const TANK_BOSS_CHARGE_SECONDS = 7;
 const TANK_BOSS_ENRAGED_CHARGE_SECONDS = 5;
 const SHIELD_RIFLE_BLOCKS = 3;
-const BALLOON_HITS_TO_POP = 2;
+const BALLOON_HITS_TO_POP = 1;
 const ENDLESS_BREAK_SECONDS = 10;
 const BOSS_ADD_SECONDS = 10;
 const BOSS_ADD_TYPES = ["normal", "fast", "fat", "slimeLow", "slimeMid", "slimeHigh"];
@@ -1288,9 +1288,11 @@ export function configureLevel(state, level) {
   state.requiredKills = plan.enemies.length;
   state.awaitingNextLevel = false;
   state.awaitingWeaponChoice = false;
+  state.awaitingForcedShotgunNotice = false;
   state.pendingBoss = Boolean(plan.boss);
   state.pendingBossType = plan.boss ?? null;
   if (plan.boss) {
+    state.awaitingForcedShotgunNotice = state.weapon === "rifle";
     state.weapon = "shotgun";
     state.rifleMode = "single";
     state.player.weapon = "shotgun";
@@ -1337,6 +1339,7 @@ export function configureBalloonLevel(state, level) {
   state.requiredKills = BALLOON_MODE.targetKills;
   state.awaitingNextLevel = false;
   state.awaitingWeaponChoice = false;
+  state.awaitingForcedShotgunNotice = false;
   state.pendingBoss = false;
   state.pendingBossType = null;
   state.bossSpawned = false;

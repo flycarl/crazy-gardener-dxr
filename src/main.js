@@ -1,6 +1,7 @@
 import { createGameState } from "./core/state.js";
 import { advanceToNextLevel, choosePostBossWeapon, configureBalloonLevel, configureEndlessMode, configureLevel, recordHighScore, restartChallenge, spawnLevelEnemies, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
+import { captureAudioState, createSoundPlayer } from "./audio.js";
 import { drawGame } from "./render.js";
 
 const canvas = document.querySelector("#game");
@@ -26,13 +27,18 @@ const pauseMainMenuButton = document.querySelector("#pauseMainMenuButton");
 const rifleToggle = document.querySelector("#rifleToggle");
 const rifleFireModeToggle = document.querySelector("#rifleFireModeToggle");
 const rifleModeHint = document.querySelector("#rifleModeHint");
+const levelModeButton = document.querySelector("#levelMode");
 const input = createInput(canvas);
+const sound = createSoundPlayer();
+
+const LEVEL_PROGRESS_KEY = "crazyGardenerLevelProgress";
 
 let state = null;
 let lastTime = performance.now();
 let selectedWeapon = "shotgun";
 let selectedRifleMode = "single";
 let highScore = Number(localStorage.getItem("crazyGardenerHighScore") ?? 0);
+let savedLevel = Math.max(1, Number(localStorage.getItem(LEVEL_PROGRESS_KEY) ?? 1) || 1);
 let paused = false;
 
 function getAimDirection(currentState) {
@@ -47,13 +53,15 @@ function getAimDirection(currentState) {
 }
 
 function start(mode) {
+  sound.unlock();
+  sound.play("ui");
   state = createGameState(mode, selectedWeapon, selectedRifleMode);
   state.highScore = highScore;
 
   if (mode === "balloon") {
     configureBalloonLevel(state, 1);
   } else if (mode === "level") {
-    configureLevel(state, 1);
+    configureLevel(state, savedLevel);
     spawnLevelEnemies(state);
   } else {
     configureEndlessMode(state);
@@ -68,11 +76,33 @@ function start(mode) {
   paused = false;
 }
 
+function saveLevelProgress(level) {
+  savedLevel = Math.max(1, Number(level) || 1);
+  localStorage.setItem(LEVEL_PROGRESS_KEY, String(savedLevel));
+  updateLevelModeButton();
+}
+
+function saveCurrentLevelProgress() {
+  if (state?.mode !== "level") return;
+  saveLevelProgress(state.awaitingNextLevel ? state.nextLevel : state.level);
+}
+
 function updateNextLevelPanel() {
   if (state?.status === "victory") {
     nextLevelTitle.textContent = "全部通关！";
     nextLevelButton.textContent = "主菜单";
     nextLevelButton.disabled = false;
+    postBossWeaponChoices.classList.add("hidden");
+    postBossRifleModeChoices.classList.add("hidden");
+    nextLevelPanel.classList.remove("hidden");
+    return;
+  }
+
+  if (state?.awaitingForcedShotgunNotice) {
+    nextLevelTitle.textContent = "Boss关：强制霰弹枪";
+    nextLevelButton.textContent = "知道了";
+    nextLevelButton.disabled = false;
+    nextLevelButton.classList.remove("hidden");
     postBossWeaponChoices.classList.add("hidden");
     postBossRifleModeChoices.classList.add("hidden");
     nextLevelPanel.classList.remove("hidden");
@@ -120,7 +150,7 @@ function updatePanels() {
   updateNextLevelPanel();
   updateFailurePanel();
   pauseMenuButton.classList.toggle("hidden", !state || state.status === "gameover" || state.status === "victory");
-  if (!state || state.status === "gameover" || state.status === "victory" || state.awaitingNextLevel || state.awaitingWeaponChoice) {
+  if (!state || state.status === "gameover" || state.status === "victory" || state.awaitingNextLevel || state.awaitingWeaponChoice || state.awaitingForcedShotgunNotice) {
     paused = false;
     pausePanel.classList.add("hidden");
     pauseMenuButton.setAttribute("aria-expanded", "false");
@@ -128,6 +158,8 @@ function updatePanels() {
 }
 
 function returnToMenu() {
+  sound.play("ui");
+  saveCurrentLevelProgress();
   state = null;
   paused = false;
   menu.classList.remove("hidden");
@@ -144,12 +176,14 @@ function returnToMenu() {
 
 function openPauseMenu() {
   if (!state || state.status !== "playing") return;
+  sound.play("ui");
   paused = true;
   pausePanel.classList.remove("hidden");
   pauseMenuButton.setAttribute("aria-expanded", "true");
 }
 
 function closePauseMenu() {
+  sound.play("ui");
   paused = false;
   pausePanel.classList.add("hidden");
   pauseMenuButton.setAttribute("aria-expanded", "false");
@@ -161,6 +195,11 @@ function updateRifleToggle() {
   rifleModeHint.hidden = selectedWeapon !== "rifle";
   rifleFireModeToggle.textContent = selectedRifleMode === "auto" ? "步枪射击：连发" : "步枪射击：单发";
   rifleModeHint.textContent = selectedRifleMode === "auto" ? "连发伤害低一些，但速度更快。" : "单发伤害更高。";
+}
+
+function updateLevelModeButton() {
+  if (!levelModeButton) return;
+  levelModeButton.textContent = savedLevel > 1 ? `关卡模式：第 ${savedLevel} 关` : "关卡模式";
 }
 
 function saveHighScore() {
@@ -180,25 +219,32 @@ function frame(now) {
 
     const pressed = consumePressed(input);
 
-    if (!paused) {
+    if (!paused && !state.awaitingForcedShotgunNotice) {
+      const audioBefore = captureAudioState(state);
       updateGame(state, input, pressed, dt);
+      sound.playFromStateChange(audioBefore, state);
       saveHighScore();
     }
     updatePanels();
+    sound.updateAmbient(state, paused);
   }
 
   drawGame(context, canvas, state, input);
   requestAnimationFrame(frame);
 }
 
-document.querySelector("#levelMode")?.addEventListener("click", () => start("level"));
+levelModeButton?.addEventListener("click", () => start("level"));
 document.querySelector("#endlessMode")?.addEventListener("click", () => start("endless"));
 document.querySelector("#balloonMode")?.addEventListener("click", () => start("balloon"));
 rifleToggle.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   selectedWeapon = selectedWeapon === "rifle" ? "shotgun" : "rifle";
   updateRifleToggle();
 });
 chooseRifleButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
     nextLevelTitle.textContent = "选择步枪射击方式";
     postBossRifleModeChoices.dataset.choosing = "true";
@@ -206,6 +252,8 @@ chooseRifleButton.addEventListener("click", () => {
   }
 });
 chooseShotgunButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
     choosePostBossWeapon(state, "shotgun");
     selectedWeapon = "shotgun";
@@ -214,6 +262,8 @@ chooseShotgunButton.addEventListener("click", () => {
   }
 });
 chooseRifleSingleButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
     choosePostBossWeapon(state, "rifle", "single");
     selectedWeapon = "rifle";
@@ -225,6 +275,8 @@ chooseRifleSingleButton.addEventListener("click", () => {
   }
 });
 chooseRifleAutoButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
     choosePostBossWeapon(state, "rifle", "auto");
     selectedWeapon = "rifle";
@@ -236,21 +288,36 @@ chooseRifleAutoButton.addEventListener("click", () => {
   }
 });
 rifleFireModeToggle.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   selectedRifleMode = selectedRifleMode === "auto" ? "single" : "auto";
   updateRifleToggle();
 });
 nextLevelButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
+    if (state.awaitingForcedShotgunNotice) {
+      state.awaitingForcedShotgunNotice = false;
+      updatePanels();
+      return;
+    }
+
     if (state.status === "victory") {
       returnToMenu();
       return;
     }
 
-    advanceToNextLevel(state);
+    const advanced = advanceToNextLevel(state);
+    if (advanced && state.mode === "level" && state.status !== "victory") {
+      saveLevelProgress(state.level);
+    }
     updatePanels();
   }
 });
 retryButton.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
   if (state) {
     restartChallenge(state);
     updatePanels();
@@ -258,6 +325,7 @@ retryButton.addEventListener("click", () => {
 });
 mainMenuButton.addEventListener("click", returnToMenu);
 pauseMenuButton.addEventListener("click", () => {
+  sound.unlock();
   if (paused) {
     closePauseMenu();
   } else {
@@ -266,5 +334,7 @@ pauseMenuButton.addEventListener("click", () => {
 });
 resumeButton.addEventListener("click", closePauseMenu);
 pauseMainMenuButton.addEventListener("click", returnToMenu);
+document.addEventListener("pointerdown", () => sound.unlock(), { once: true });
 updateRifleToggle();
+updateLevelModeButton();
 requestAnimationFrame(frame);

@@ -1076,27 +1076,25 @@ test("balloon mode bullets only disappear at world boundaries", () => {
   assert.ok(state.pellets.length < pelletCount);
 });
 
-test("balloon pops after two balloon hits and the zombie falls with half health", () => {
+test("balloon pops after one balloon hit and the zombie falls with half health", () => {
   const state = createGameState("level");
   const enemy = createEnemy("balloon", 650, WORLD.groundY);
   state.enemies.push(enemy);
 
-  for (let index = 0; index < 2; index += 1) {
-    state.pellets.push({
-      x: enemy.x + enemy.w / 2,
-      y: enemy.y - 34,
-      vx: 900,
-      vy: 0,
-      life: 1,
-      radius: 5,
-      damage: 999,
-      damageFalloff: 1,
-      weapon: "shotgun",
-      piercesRemaining: 0,
-      hitEnemyIds: [],
-    });
-    applyPelletHits(state);
-  }
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y - 34,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 5,
+    damage: 999,
+    damageFalloff: 1,
+    weapon: "shotgun",
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+  applyPelletHits(state);
 
   assert.equal(enemy.flying, false);
   assert.equal(enemy.balloonPopped, true);
@@ -1799,8 +1797,18 @@ test("boss levels show a forced shotgun warning beside Dave", () => {
   configureLevel(state, 5);
 
   assert.equal(state.weapon, "shotgun");
+  assert.equal(state.awaitingForcedShotgunNotice, true);
   assert.ok(state.floatTexts.some((text) => text.text.includes("强制霰弹枪")));
   assert.ok(state.floatTexts.some((text) => Math.abs(text.x - (state.player.x + state.player.w / 2)) < 1));
+});
+
+test("boss levels only pause for a forced shotgun notice when rifle was selected", () => {
+  const state = createGameState("level", "shotgun");
+
+  configureLevel(state, 5);
+
+  assert.equal(state.weapon, "shotgun");
+  assert.equal(state.awaitingForcedShotgunNotice, false);
 });
 
 test("level bosses summon one random small zombie every five seconds", () => {
@@ -2215,4 +2223,28 @@ test("hud styles promote red health hearts and a left-side stats column", () => 
   assert.match(css, /#e52f39/);
   assert.match(css, /\.hud-stats/);
   assert.match(css, /justify-items: start/);
+});
+
+test("main game entry wires browser-generated sound effects", () => {
+  const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const audio = readFileSync(new URL("../src/audio.js", import.meta.url), "utf8");
+
+  assert.match(main, /crazyGardenerLevelProgress/);
+  assert.match(main, /saveCurrentLevelProgress/);
+  assert.match(main, /关卡模式：第/);
+  assert.match(main, /createSoundPlayer/);
+  assert.match(main, /playFromStateChange/);
+  assert.match(main, /updateAmbient/);
+  assert.match(main, /Boss关：强制霰弹枪/);
+  assert.match(main, /知道了/);
+  assert.match(audio, /AudioContext/);
+  assert.match(audio, /shotgun/);
+  assert.match(audio, /balloonPop/);
+  assert.match(audio, /zombieGroan/);
+  assert.match(audio, /slimeHop/);
+  assert.match(audio, /stockHit/);
+  assert.match(audio, /bossDefeated/);
+  assert.match(audio, /shieldBlock/);
+  assert.match(audio, /playerProjectileHit/);
+  assert.match(audio, /pickup/);
 });

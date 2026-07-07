@@ -343,18 +343,14 @@ function drawEnemies(context, state) {
     context.fill();
 
     if (enemy.isSlime) {
-      const slimeColor = enemy.type === "slimeHigh" ? "#28b8ad" : enemy.type === "slimeMid" ? "#61c97e" : "#a0db73";
-      ellipse(context, x + enemy.w / 2, y + enemy.h * 0.68, enemy.w * 0.46, enemy.h * 0.34, 0, slimeColor, "#21463a", 4);
-      ellipse(context, x + enemy.w * 0.42, y + enemy.h * 0.48, enemy.w * 0.2, enemy.h * 0.18, -0.4, slimeColor, "#21463a", 3);
-      context.fillStyle = "rgba(255, 255, 255, 0.48)";
+      const slimeColor = enemy.type === "slimeHigh" ? "#2ec4b6" : enemy.type === "slimeMid" ? "#57cc99" : "#80ed99";
+      context.fillStyle = slimeColor;
       context.beginPath();
-      context.ellipse(x + enemy.w * 0.34, y + enemy.h * 0.5, 6, 4, -0.4, 0, Math.PI * 2);
+      context.ellipse(x + enemy.w / 2, y + enemy.h * 0.68, enemy.w * 0.44, enemy.h * 0.34, 0, 0, Math.PI * 2);
       context.fill();
-      context.fillStyle = "#153329";
-      context.beginPath();
-      context.arc(x + enemy.w * 0.33, y + enemy.h * 0.56, 3.5, 0, Math.PI * 2);
-      context.arc(x + enemy.w * 0.61, y + enemy.h * 0.56, 3.5, 0, Math.PI * 2);
-      context.fill();
+      context.fillStyle = "#174c43";
+      context.fillRect(x + enemy.w * 0.32, y + enemy.h * 0.55, 5, 5);
+      context.fillRect(x + enemy.w * 0.6, y + enemy.h * 0.55, 5, 5);
       roundRect(context, x, y - 13, enemy.w, 7, 4, "rgba(0, 0, 0, 0.45)", "rgba(0, 0, 0, 0.15)", 1);
       context.fillStyle = "#f5d44d";
       context.fillRect(x + 1, y - 12, Math.max(0, enemy.w * healthRatio - 2), 5);
@@ -490,6 +486,30 @@ function drawCorpses(context, state) {
     context.globalAlpha = Math.max(0, fade);
     context.translate(x + corpse.w / 2, y + corpse.h / 2);
     context.rotate(corpse.rotation);
+    if (corpse.type?.startsWith("slime")) {
+      const slimeColor = corpse.type === "slimeHigh" ? "#2ec4b6" : corpse.type === "slimeMid" ? "#57cc99" : "#80ed99";
+      context.fillStyle = slimeColor;
+      context.beginPath();
+      context.ellipse(0, corpse.h * 0.18, corpse.w * 0.44, corpse.h * 0.34, 0, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = "rgba(23, 76, 67, 0.75)";
+      context.lineWidth = 3;
+      context.stroke();
+      context.strokeStyle = "#174c43";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(-corpse.w * 0.24, corpse.h * 0.04);
+      context.lineTo(-corpse.w * 0.12, corpse.h * 0.16);
+      context.moveTo(-corpse.w * 0.12, corpse.h * 0.04);
+      context.lineTo(-corpse.w * 0.24, corpse.h * 0.16);
+      context.moveTo(corpse.w * 0.14, corpse.h * 0.04);
+      context.lineTo(corpse.w * 0.26, corpse.h * 0.16);
+      context.moveTo(corpse.w * 0.26, corpse.h * 0.04);
+      context.lineTo(corpse.w * 0.14, corpse.h * 0.16);
+      context.stroke();
+      context.restore();
+      continue;
+    }
     const corpseFill = corpse.type === "fast" ? "#7f3f37" : corpse.type === "fat" ? "#785239" : "#5d6649";
     roundRect(context, -corpse.w / 2, -corpse.h / 2, corpse.w, corpse.h, 7, corpseFill, "rgba(28, 37, 25, 0.75)", 3);
     ellipse(context, -corpse.w * 0.1, -corpse.h * 0.23, corpse.w * 0.22, corpse.h * 0.18, 0.15, "#9aaa72", "rgba(28, 37, 25, 0.75)", 2);
