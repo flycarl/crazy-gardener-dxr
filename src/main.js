@@ -1,5 +1,5 @@
 import { createGameState } from "./core/state.js";
-import { advanceToNextLevel, choosePostBossWeapon, configureBalloonLevel, configureEndlessMode, configureLevel, recordHighScore, restartChallenge, spawnLevelEnemies, updateGame } from "./core/systems.js";
+import { advanceToNextLevel, choosePostBossWeapon, configureBalloonLevel, configureEndlessMode, configureLevel, createEnemy, recordHighScore, restartChallenge, spawnLevelEnemies, updateGame } from "./core/systems.js";
 import { consumePressed, createInput } from "./input.js";
 import { captureAudioState, createSoundPlayer } from "./audio.js";
 import { drawGame } from "./render.js";
@@ -24,10 +24,31 @@ const pauseMenuButton = document.querySelector("#pauseMenuButton");
 const pausePanel = document.querySelector("#pausePanel");
 const resumeButton = document.querySelector("#resumeButton");
 const pauseMainMenuButton = document.querySelector("#pauseMainMenuButton");
+const pauseCheatButton = document.querySelector("#pauseCheatButton");
 const rifleToggle = document.querySelector("#rifleToggle");
 const rifleFireModeToggle = document.querySelector("#rifleFireModeToggle");
 const rifleModeHint = document.querySelector("#rifleModeHint");
 const levelModeButton = document.querySelector("#levelMode");
+const cheatMenuButton = document.querySelector("#cheatMenuButton");
+const cheatPanel = document.querySelector("#cheatPanel");
+const cheatEnabled = document.querySelector("#cheatEnabled");
+const cheatInvincible = document.querySelector("#cheatInvincible");
+const cheatInfiniteAmmo = document.querySelector("#cheatInfiniteAmmo");
+const cheatDamage = document.querySelector("#cheatDamage");
+const cheatSpeed = document.querySelector("#cheatSpeed");
+const cheatJump = document.querySelector("#cheatJump");
+const cheatHealth = document.querySelector("#cheatHealth");
+const cheatLevel = document.querySelector("#cheatLevel");
+const cheatReminder = document.querySelector("#cheatReminder");
+const cheatApplyButton = document.querySelector("#cheatApplyButton");
+const cheatHealButton = document.querySelector("#cheatHealButton");
+const cheatAmmoButton = document.querySelector("#cheatAmmoButton");
+const cheatLevelButton = document.querySelector("#cheatLevelButton");
+const cheatSpawnNormalButton = document.querySelector("#cheatSpawnNormalButton");
+const cheatSpawnFatButton = document.querySelector("#cheatSpawnFatButton");
+const cheatSpawnSlimeButton = document.querySelector("#cheatSpawnSlimeButton");
+const cheatClearButton = document.querySelector("#cheatClearButton");
+const cheatCloseButton = document.querySelector("#cheatCloseButton");
 const input = createInput(canvas);
 const sound = createSoundPlayer();
 
@@ -39,7 +60,17 @@ let selectedWeapon = "shotgun";
 let selectedRifleMode = "single";
 let highScore = Number(localStorage.getItem("crazyGardenerHighScore") ?? 0);
 let savedLevel = Math.max(1, Number(localStorage.getItem(LEVEL_PROGRESS_KEY) ?? 1) || 1);
+let selectedCheats = {
+  enabled: false,
+  invincible: false,
+  infiniteAmmo: false,
+  damageMultiplier: 1,
+  speedMultiplier: 1,
+  jumpMultiplier: 1,
+};
 let paused = false;
+let cheatAppliedSinceOpen = false;
+let cheatHealthSetSinceOpen = false;
 
 function getAimDirection(currentState) {
   const player = currentState.player;
@@ -57,6 +88,7 @@ function start(mode) {
   sound.play("ui");
   state = createGameState(mode, selectedWeapon, selectedRifleMode);
   state.highScore = highScore;
+  state.cheats = { ...selectedCheats };
 
   if (mode === "balloon") {
     configureBalloonLevel(state, 1);
@@ -71,6 +103,7 @@ function start(mode) {
   nextLevelPanel.classList.add("hidden");
   failurePanel.classList.add("hidden");
   pausePanel.classList.add("hidden");
+  cheatPanel.classList.add("hidden");
   pauseMenuButton.classList.remove("hidden");
   pauseMenuButton.setAttribute("aria-expanded", "false");
   paused = false;
@@ -85,6 +118,124 @@ function saveLevelProgress(level) {
 function saveCurrentLevelProgress() {
   if (state?.mode !== "level") return;
   saveLevelProgress(state.awaitingNextLevel ? state.nextLevel : state.level);
+}
+
+function readNumber(inputElement, fallback, min, max) {
+  const value = Number(inputElement?.value ?? fallback);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function applyCheatSettings() {
+  cheatReminder?.classList.add("hidden");
+  selectedCheats = {
+    enabled: Boolean(cheatEnabled?.checked),
+    invincible: Boolean(cheatInvincible?.checked),
+    infiniteAmmo: Boolean(cheatInfiniteAmmo?.checked),
+    damageMultiplier: readNumber(cheatDamage, 1, 0.1, 20),
+    speedMultiplier: readNumber(cheatSpeed, 1, 0.1, 5),
+    jumpMultiplier: readNumber(cheatJump, 1, 0.1, 5),
+  };
+
+  if (state) {
+    state.cheats = { ...selectedCheats };
+    if (state.cheats.enabled && state.cheats.infiniteAmmo) {
+      state.player.reloading = false;
+      state.player.reloadTimer = 0;
+      state.player.ammo = state.player.magazineSize;
+    }
+  }
+}
+
+function updateCheatInputs() {
+  const cheats = state?.cheats ?? selectedCheats;
+  if (cheatEnabled) cheatEnabled.checked = Boolean(cheats.enabled);
+  if (cheatInvincible) cheatInvincible.checked = Boolean(cheats.invincible);
+  if (cheatInfiniteAmmo) cheatInfiniteAmmo.checked = Boolean(cheats.infiniteAmmo);
+  if (cheatDamage) cheatDamage.value = String(cheats.damageMultiplier ?? 1);
+  if (cheatSpeed) cheatSpeed.value = String(cheats.speedMultiplier ?? 1);
+  if (cheatJump) cheatJump.value = String(cheats.jumpMultiplier ?? 1);
+  if (cheatHealth) cheatHealth.value = String(Math.ceil(state?.player?.health ?? 100));
+  if (cheatLevel) cheatLevel.value = String(state?.mode === "level" ? state.level : savedLevel);
+}
+
+function openCheatPanel() {
+  sound.unlock();
+  sound.play("ui");
+  cheatAppliedSinceOpen = false;
+  cheatHealthSetSinceOpen = false;
+  cheatReminder?.classList.add("hidden");
+  updateCheatInputs();
+  cheatPanel.classList.remove("hidden");
+  if (state?.status === "playing") {
+    paused = true;
+    pausePanel.classList.add("hidden");
+    pauseMenuButton.setAttribute("aria-expanded", "true");
+  }
+}
+
+function closeCheatPanel() {
+  sound.play("ui");
+  if (!cheatAppliedSinceOpen || !cheatHealthSetSinceOpen) {
+    cheatReminder?.classList.remove("hidden");
+    return;
+  }
+
+  cheatPanel.classList.add("hidden");
+  if (state?.status === "playing") {
+    paused = false;
+  }
+  pauseMenuButton.setAttribute("aria-expanded", "false");
+}
+
+function setCheatHealth() {
+  cheatHealthSetSinceOpen = true;
+  cheatReminder?.classList.add("hidden");
+  if (!state) return;
+  const health = readNumber(cheatHealth, state.player.health, 1, 999);
+  state.player.maxHealth = Math.max(state.player.maxHealth, health);
+  state.player.health = health;
+  state.player.regenDelay = 0;
+  state.player.regenTimer = 0;
+  state.player.regenStartHealth = health;
+}
+
+function refillCheatAmmo() {
+  if (!state) return;
+  state.player.reloading = false;
+  state.player.reloadTimer = 0;
+  state.player.ammo = state.player.magazineSize;
+}
+
+function jumpToCheatLevel() {
+  const level = Math.round(readNumber(cheatLevel, savedLevel, 1, 100));
+  saveLevelProgress(level);
+  if (!state || state.mode !== "level") return;
+  configureLevel(state, level);
+  state.cheats = { ...selectedCheats };
+  spawnLevelEnemies(state);
+  updatePanels();
+}
+
+function spawnCheatEnemy(type) {
+  if (!state) return;
+  const x = Math.min(state.player.x + 560, 3380);
+  const enemy = createEnemy(type, x);
+  state.enemies.push(enemy);
+  state.enemiesRemaining = state.enemies.length;
+}
+
+function clearCheatEnemies() {
+  if (!state) return;
+  state.enemies = [];
+  state.enemyProjectiles = [];
+  state.pellets = [];
+  state.bossAlive = false;
+  state.pendingBoss = false;
+  state.enemiesRemaining = 0;
+  if (state.mode === "level" || state.mode === "balloon") {
+    state.kills = Math.max(state.kills, state.requiredKills);
+  }
 }
 
 function updateNextLevelPanel() {
@@ -170,6 +321,7 @@ function returnToMenu() {
   delete postBossRifleModeChoices.dataset.choosing;
   failurePanel.classList.add("hidden");
   pausePanel.classList.add("hidden");
+  cheatPanel.classList.add("hidden");
   pauseMenuButton.classList.add("hidden");
   pauseMenuButton.setAttribute("aria-expanded", "false");
 }
@@ -334,6 +486,48 @@ pauseMenuButton.addEventListener("click", () => {
 });
 resumeButton.addEventListener("click", closePauseMenu);
 pauseMainMenuButton.addEventListener("click", returnToMenu);
+cheatMenuButton.addEventListener("click", openCheatPanel);
+pauseCheatButton.addEventListener("click", openCheatPanel);
+cheatApplyButton.addEventListener("click", () => {
+  sound.play("ui");
+  cheatAppliedSinceOpen = true;
+  applyCheatSettings();
+});
+cheatHealButton.addEventListener("click", () => {
+  sound.play("pickup");
+  applyCheatSettings();
+  setCheatHealth();
+});
+cheatAmmoButton.addEventListener("click", () => {
+  sound.play("reloadReady");
+  applyCheatSettings();
+  refillCheatAmmo();
+});
+cheatLevelButton.addEventListener("click", () => {
+  sound.play("clear");
+  applyCheatSettings();
+  jumpToCheatLevel();
+});
+cheatSpawnNormalButton.addEventListener("click", () => {
+  sound.play("zombieGroan");
+  applyCheatSettings();
+  spawnCheatEnemy("normal");
+});
+cheatSpawnFatButton.addEventListener("click", () => {
+  sound.play("shieldBlock");
+  applyCheatSettings();
+  spawnCheatEnemy("fat");
+});
+cheatSpawnSlimeButton.addEventListener("click", () => {
+  sound.play("slimeHop");
+  applyCheatSettings();
+  spawnCheatEnemy("slimeMid");
+});
+cheatClearButton.addEventListener("click", () => {
+  sound.play("clear");
+  clearCheatEnemies();
+});
+cheatCloseButton.addEventListener("click", closeCheatPanel);
 document.addEventListener("pointerdown", () => sound.unlock(), { once: true });
 updateRifleToggle();
 updateLevelModeButton();

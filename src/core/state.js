@@ -72,6 +72,14 @@ export function createGameState(mode = "level", weapon = "shotgun", rifleMode = 
     endlessWavesSinceBreak: 0,
     bossAddTimer: 5,
     nextLevel: 1,
+    cheats: {
+      enabled: false,
+      invincible: false,
+      infiniteAmmo: false,
+      damageMultiplier: 1,
+      speedMultiplier: 1,
+      jumpMultiplier: 1,
+    },
   };
 }
 

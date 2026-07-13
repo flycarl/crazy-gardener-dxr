@@ -129,6 +129,62 @@ test("fireShotgun spends one shell and creates five pellets", () => {
   assert.equal(state.pellets.length, 5);
 });
 
+test("cheat mode infinite ammo keeps the magazine full", () => {
+  const state = createGameState("level");
+  state.cheats.enabled = true;
+  state.cheats.infiniteAmmo = true;
+
+  const fired = fireShotgun(state, { x: 1, y: 0 });
+
+  assert.equal(fired, true);
+  assert.equal(state.player.ammo, state.player.magazineSize);
+  assert.equal(state.player.reloading, false);
+});
+
+test("cheat mode damage multiplier boosts pellet damage", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("normal", 500, WORLD.groundY);
+  state.enemies.push(enemy);
+  state.cheats.enabled = true;
+  state.cheats.damageMultiplier = 2;
+  state.pellets.push({
+    x: enemy.x + enemy.w / 2,
+    y: enemy.y + enemy.h / 2,
+    previousX: enemy.x + enemy.w / 2 - 5,
+    previousY: enemy.y + enemy.h / 2,
+    vx: 900,
+    vy: 0,
+    life: 1,
+    radius: 5,
+    damage: 5,
+    damageFalloff: 1,
+    weapon: "shotgun",
+    piercesRemaining: 0,
+    hitEnemyIds: [],
+  });
+
+  applyPelletHits(state);
+
+  assert.equal(enemy.health, enemy.maxHealth - 10);
+});
+
+test("cheat mode invincible prevents contact damage", () => {
+  const state = createGameState("level");
+  const enemy = createEnemy("normal", state.player.x, state.player.y);
+  state.enemies.push(enemy);
+  state.cheats.enabled = true;
+  state.cheats.invincible = true;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.player.health, state.player.maxHealth);
+});
+
 test("rifle fires one piercing bullet from a thirty round magazine", () => {
   const state = createGameState("level", "rifle");
 
@@ -2212,8 +2268,26 @@ test("page includes an in-game pause menu with resume and main menu actions", ()
   assert.match(html, /id="pauseMenuButton"/);
   assert.match(html, /id="resumeButton"/);
   assert.match(html, /id="pauseMainMenuButton"/);
+  assert.match(html, /id="pauseCheatButton"/);
   assert.match(html, />继续</);
   assert.match(html, />主菜单</);
+});
+
+test("page includes a cheat panel for tuning game parameters", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+
+  assert.match(html, /id="cheatMenuButton"/);
+  assert.match(html, /id="cheatPanel"/);
+  assert.match(html, /id="cheatDamage"/);
+  assert.match(html, /id="cheatReminder"/);
+  assert.match(html, /danger-action/);
+  assert.match(html, /id="cheatLevelButton"/);
+  assert.match(html, /生成史莱姆/);
+  assert.match(main, /applyCheatSettings/);
+  assert.match(main, /cheatAppliedSinceOpen/);
+  assert.match(main, /cheatHealthSetSinceOpen/);
+  assert.match(main, /spawnCheatEnemy/);
 });
 
 test("hud styles promote red health hearts and a left-side stats column", () => {

@@ -99,6 +99,15 @@ function hasPower(state, id) {
   return getPowerValue(state, id) > 0;
 }
 
+function getCheatMultiplier(state, key) {
+  if (!state?.cheats?.enabled) return 1;
+  return Math.max(0.1, Number(state.cheats[key] ?? 1) || 1);
+}
+
+function hasCheat(state, key) {
+  return Boolean(state?.cheats?.enabled && state.cheats[key]);
+}
+
 function attackHitsShieldFront(enemy, attackDirection) {
   return Boolean(enemy.hasShield && !enemy.shieldBroken && enemy.facing === -Math.sign(attackDirection || 1));
 }
@@ -181,6 +190,10 @@ function dropRandomPermanentBuffOnDeath(state) {
 }
 
 function damagePlayer(state, amount) {
+  if (hasCheat(state, "invincible")) {
+    return false;
+  }
+
   const player = state.player;
   if ((player.damageCooldown ?? 0) > 0) {
     return false;
@@ -525,9 +538,11 @@ function updatePowerUps(state, dt) {
 function updatePlayer(state, input, pressed, dt) {
   const player = state.player;
   const horizontal = Number(Boolean(input.right)) - Number(Boolean(input.left));
+  const speedMultiplier = getCheatMultiplier(state, "speedMultiplier");
+  const jumpMultiplier = getCheatMultiplier(state, "jumpMultiplier");
 
   if (horizontal !== 0) {
-    player.vx = horizontal * PLAYER.speed;
+    player.vx = horizontal * PLAYER.speed * speedMultiplier;
     player.facing = horizontal;
   } else if (player.onGround) {
     player.vx *= FLOOR_FRICTION;
@@ -535,7 +550,7 @@ function updatePlayer(state, input, pressed, dt) {
   }
 
   if (pressed.jumpPressed && player.onGround) {
-    player.vy = PLAYER.jumpVelocity;
+    player.vy = PLAYER.jumpVelocity * jumpMultiplier;
     player.onGround = false;
   }
 
@@ -1001,7 +1016,7 @@ export function applyPelletHits(state) {
         pellet.life = 0;
       } else {
       const hitIndex = pellet.hitEnemyIds.length;
-      const damage = (pellet.damage ?? PELLET_DAMAGE) * Math.pow(pellet.damageFalloff ?? 1, hitIndex);
+      const damage = (pellet.damage ?? PELLET_DAMAGE) * Math.pow(pellet.damageFalloff ?? 1, hitIndex) * getCheatMultiplier(state, "damageMultiplier");
 
       for (const enemy of hitEnemies) {
       enemy.health -= damage;
@@ -1501,6 +1516,12 @@ export function startReload(player, activePowerUps = {}, permanentPowerUps = {})
 export function fireShotgun(state, aim) {
   const player = state.player;
 
+  if (hasCheat(state, "infiniteAmmo")) {
+    player.reloading = false;
+    player.reloadTimer = 0;
+    player.ammo = Math.max(1, player.ammo);
+  }
+
   if (player.reloading) {
     return false;
   }
@@ -1546,7 +1567,11 @@ export function fireShotgun(state, aim) {
     });
   }
 
-  player.ammo -= 1;
+  if (hasCheat(state, "infiniteAmmo")) {
+    player.ammo = player.magazineSize;
+  } else {
+    player.ammo -= 1;
+  }
   if (state.mode !== "balloon") {
     player.damageCooldown = Math.max(player.damageCooldown ?? 0, SHOOT_GUARD_SECONDS);
   }

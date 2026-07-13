@@ -15,6 +15,7 @@
         <div class="menu-actions">
           <button id="rifleToggle" type="button">步枪模式：关</button>
           <button id="rifleFireModeToggle" type="button">步枪射击：单发</button>
+          <button id="cheatMenuButton" type="button">作弊模式</button>
           <button id="levelMode" type="button">关卡模式</button>
           <button id="endlessMode" type="button">无尽模式</button>
           <button id="balloonMode" type="button">打气球模式：手枪</button>
@@ -46,7 +47,33 @@
         <div class="pause-title">暂停</div>
         <div class="failure-actions">
           <button id="resumeButton" type="button">继续</button>
+          <button id="pauseCheatButton" type="button">作弊模式</button>
           <button id="pauseMainMenuButton" type="button">主菜单</button>
+        </div>
+      </section>
+      <section id="cheatPanel" class="cheat-panel hidden">
+        <div class="pause-title">作弊模式</div>
+        <div class="cheat-grid">
+          <label><input id="cheatEnabled" type="checkbox"> 启用作弊</label>
+          <label><input id="cheatInvincible" type="checkbox"> 无敌</label>
+          <label><input id="cheatInfiniteAmmo" type="checkbox"> 无限弹药</label>
+          <label>伤害倍率 <input id="cheatDamage" type="number" min="0.1" max="20" step="0.1" value="1"></label>
+          <label>速度倍率 <input id="cheatSpeed" type="number" min="0.1" max="5" step="0.1" value="1"></label>
+          <label>跳跃倍率 <input id="cheatJump" type="number" min="0.1" max="5" step="0.1" value="1"></label>
+          <label>生命 <input id="cheatHealth" type="number" min="1" max="999" step="1" value="100"></label>
+          <label>关卡 <input id="cheatLevel" type="number" min="1" max="100" step="1" value="1"></label>
+        </div>
+        <p id="cheatReminder" class="cheat-reminder hidden">关闭前请先点“应用参数”和“设置生命”。</p>
+        <div class="cheat-actions">
+          <button id="cheatApplyButton" class="danger-action" type="button">应用参数</button>
+          <button id="cheatHealButton" class="danger-action" type="button">设置生命</button>
+          <button id="cheatAmmoButton" type="button">补满弹药</button>
+          <button id="cheatLevelButton" type="button">跳到关卡</button>
+          <button id="cheatSpawnNormalButton" type="button">生成普通僵尸</button>
+          <button id="cheatSpawnFatButton" type="button">生成防爆门</button>
+          <button id="cheatSpawnSlimeButton" type="button">生成史莱姆</button>
+          <button id="cheatClearButton" type="button">清空怪物</button>
+          <button id="cheatCloseButton" type="button">关闭</button>
         </div>
       </section>
       <section id="hud" class="hud" aria-live="polite"></section>
