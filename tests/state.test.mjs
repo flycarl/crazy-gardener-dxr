@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { ENEMY_TYPES, LEVELS, POWER_UPS, RIFLE, SHOTGUN, WORLD } from "../src/core/constants.js";
 import { createGameState, createPlayer, shouldSpawnExtraction } from "../src/core/state.js";
+import { getBossBarRows } from "../src/render.js";
 import {
   applyStockHits,
   applyPelletHits,
@@ -1900,6 +1901,27 @@ test("quarter boss levels spawn two bosses after smaller enemies are cleared", (
     ["rangedBoss", "tankBoss"],
   );
   assert.equal(bosses.every((boss) => Math.abs(boss.x - state.player.x) >= 560), true);
+});
+
+test("dual boss levels expose two boss health bar rows", () => {
+  const state = createGameState("level");
+  const tank = createEnemy("tankBoss", 900, WORLD.groundY);
+  const ranged = createEnemy("rangedBoss", 1100, WORLD.groundY);
+  tank.health = 310;
+  ranged.health = 230;
+  state.enemies = [tank, ranged];
+
+  const rows = getBossBarRows(state);
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(
+    rows.map((row) => row.label),
+    ["冲锋 Boss", "远程 Boss"],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.y),
+    [48, 88],
+  );
 });
 
 test("boss clears ask for the next weapon before continuing", () => {

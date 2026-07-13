@@ -687,30 +687,44 @@ function formatPowerUps(activePowerUps, permanentPowerUps = {}) {
   return `强化：${[...permanentText, ...activeText].join(", ")}`;
 }
 
+export function getBossBarRows(state) {
+  return (state?.enemies ?? [])
+    .filter((enemy) => enemy.isBoss)
+    .map((boss, index) => ({
+      label: boss.label,
+      health: Math.ceil(boss.health),
+      maxHealth: boss.maxHealth,
+      ratio: Math.max(0, boss.health / boss.maxHealth),
+      y: 48 + index * 40,
+    }));
+}
+
 function drawBossBar(context, canvas, state) {
-  const boss = state.enemies.find((enemy) => enemy.isBoss);
-  if (!boss) return;
+  const rows = getBossBarRows(state);
+  if (rows.length === 0) return;
 
-  const ratio = Math.max(0, boss.health / boss.maxHealth);
   const x = canvas.width / 2 - 260;
-  const y = 48;
 
-  context.fillStyle = "rgba(0, 0, 0, 0.58)";
-  context.beginPath();
-  context.roundRect(x, y, 520, 34, 7);
-  context.fill();
-  context.fillStyle = "#d7263d";
-  context.beginPath();
-  context.roundRect(x + 5, y + 7, 510 * ratio, 20, 5);
-  context.fill();
-  context.strokeStyle = "rgba(255, 248, 215, 0.72)";
-  context.lineWidth = 2;
-  context.strokeRect(x + 5, y + 7, 510, 20);
-  context.fillStyle = "#fff8d7";
-  context.font = "bold 16px Arial";
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText(`${boss.label}  ${Math.ceil(boss.health)}/${boss.maxHealth}`, canvas.width / 2, y + 17);
+  for (const row of rows) {
+    const y = row.y;
+
+    context.fillStyle = "rgba(0, 0, 0, 0.58)";
+    context.beginPath();
+    context.roundRect(x, y, 520, 34, 7);
+    context.fill();
+    context.fillStyle = "#d7263d";
+    context.beginPath();
+    context.roundRect(x + 5, y + 7, 510 * row.ratio, 20, 5);
+    context.fill();
+    context.strokeStyle = "rgba(255, 248, 215, 0.72)";
+    context.lineWidth = 2;
+    context.strokeRect(x + 5, y + 7, 510, 20);
+    context.fillStyle = "#fff8d7";
+    context.font = "bold 16px Arial";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(`${row.label}  ${row.health}/${row.maxHealth}`, canvas.width / 2, y + 17);
+  }
 }
 
 function updateHud(state) {
