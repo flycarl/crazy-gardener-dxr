@@ -1458,6 +1458,7 @@ export function restartChallenge(state) {
   const weapon = state.weapon === "rifle" ? "rifle" : "shotgun";
   const rifleMode = state.rifleMode === "auto" ? "auto" : "single";
   const level = state.level;
+  const cheats = { ...state.cheats };
   const fresh = createGameState(mode, weapon, rifleMode);
 
   if (mode === "balloon") {
@@ -1470,6 +1471,7 @@ export function restartChallenge(state) {
   }
 
   Object.assign(state, fresh);
+  state.cheats = cheats;
   return state;
 }
 

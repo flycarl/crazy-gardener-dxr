@@ -1326,6 +1326,30 @@ test("restarting a failed level mode challenge resumes the current level", () =>
   assert.ok(state.enemies.length > 0);
 });
 
+test("restarting after death keeps cheat settings", () => {
+  const state = createGameState("level", "rifle");
+  state.status = "gameover";
+  state.cheats = {
+    enabled: true,
+    invincible: true,
+    infiniteAmmo: true,
+    damageMultiplier: 3,
+    speedMultiplier: 1.7,
+    jumpMultiplier: 1.4,
+  };
+
+  restartChallenge(state);
+
+  assert.deepEqual(state.cheats, {
+    enabled: true,
+    invincible: true,
+    infiniteAmmo: true,
+    damageMultiplier: 3,
+    speedMultiplier: 1.7,
+    jumpMultiplier: 1.4,
+  });
+});
+
 test("restarting endless mode starts again from wave one", () => {
   const state = createGameState("endless", "rifle");
   state.status = "gameover";
