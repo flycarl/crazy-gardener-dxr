@@ -737,22 +737,25 @@ function spawnLevelBossAdd(state) {
 }
 
 function spawnPendingBoss(state) {
-  if (!state.pendingBoss || !state.pendingBossType) {
+  const bossTypes = state.pendingBossTypes?.length ? state.pendingBossTypes : state.pendingBossType ? [state.pendingBossType] : [];
+  if (!state.pendingBoss || bossTypes.length === 0) {
     return null;
   }
 
-  const template = ENEMY_TYPES[state.pendingBossType];
-  const bossX = getSpawnX(state, state.level + 3);
-  const boss = createEnemy(state.pendingBossType, bossX, WORLD.groundY, state.cheats);
+  const bosses = bossTypes.map((bossType, index) => {
+    const bossX = getSpawnX(state, state.level + 3 + index);
+    return createEnemy(bossType, bossX, WORLD.groundY, state.cheats);
+  });
 
-  state.enemies.push(boss);
+  state.enemies.push(...bosses);
   state.pendingBoss = false;
   state.pendingBossType = null;
+  state.pendingBossTypes = [];
   state.bossSpawned = true;
   state.bossAlive = true;
   state.enemiesRemaining = state.enemies.length;
 
-  return boss;
+  return bosses[0] ?? null;
 }
 
 function getStockHitbox(state) {
@@ -1343,14 +1346,16 @@ export function configureLevel(state, level) {
   state.bossAlive = false;
   state.bossAddTimer = LEVEL_BOSS_ADD_SECONDS;
   state.levelBossAddsSpawned = 0;
+  state.pendingBossTypes = [];
   state.enemiesRemaining = 0;
   state.spawnTimer = 0;
   state.requiredKills = plan.enemies.length;
   state.awaitingNextLevel = false;
   state.awaitingWeaponChoice = false;
   state.awaitingForcedShotgunNotice = false;
-  state.pendingBoss = Boolean(plan.boss);
-  state.pendingBossType = plan.boss ?? null;
+  state.pendingBossTypes = Array.isArray(plan.boss) ? [...plan.boss] : plan.boss ? [plan.boss] : [];
+  state.pendingBoss = state.pendingBossTypes.length > 0;
+  state.pendingBossType = state.pendingBossTypes[0] ?? null;
   if (plan.boss) {
     state.awaitingForcedShotgunNotice = state.weapon === "rifle";
     state.weapon = "shotgun";

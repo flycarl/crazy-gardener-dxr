@@ -270,10 +270,12 @@ function createLevelPlan(index) {
     });
   }
 
+  const boss = levelNumber % 25 === 0 ? ["tankBoss", "rangedBoss"] : levelNumber % 5 === 0 ? levelNumber % 10 === 0 ? "rangedBoss" : "tankBoss" : null;
+
   return {
     enemies,
     platforms,
-    ...(levelNumber % 5 === 0 ? { boss: levelNumber % 10 === 0 ? "rangedBoss" : "tankBoss" } : {}),
+    ...(boss ? { boss } : {}),
   };
 }
 

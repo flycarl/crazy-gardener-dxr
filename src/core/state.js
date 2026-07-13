@@ -66,6 +66,7 @@ export function createGameState(mode = "level", weapon = "shotgun", rifleMode = 
     awaitingForcedShotgunNotice: false,
     pendingBoss: false,
     pendingBossType: null,
+    pendingBossTypes: [],
     pendingEndlessBoss: false,
     pendingEndlessBossType: null,
     endlessBossActive: false,

@@ -297,6 +297,7 @@ function clearCheatEnemies() {
   state.bossAlive = false;
   state.pendingBoss = false;
   state.enemiesRemaining = 0;
+  state.pendingBossTypes = [];
   if (state.mode === "level" || state.mode === "balloon") {
     state.kills = Math.max(state.kills, state.requiredKills);
   }

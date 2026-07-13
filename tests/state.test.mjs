@@ -839,6 +839,10 @@ test("level mode has one hundred staged levels with rising zombie counts", () =>
   assert.ok(enemyCounts[49] < enemyCounts[99]);
   assert.equal(LEVELS[4].boss, "tankBoss");
   assert.equal(LEVELS[9].boss, "rangedBoss");
+  assert.deepEqual(LEVELS[24].boss, ["tankBoss", "rangedBoss"]);
+  assert.deepEqual(LEVELS[49].boss, ["tankBoss", "rangedBoss"]);
+  assert.deepEqual(LEVELS[74].boss, ["tankBoss", "rangedBoss"]);
+  assert.deepEqual(LEVELS[99].boss, ["tankBoss", "rangedBoss"]);
   assert.ok(LEVELS[99].boss);
 });
 
@@ -1867,6 +1871,35 @@ test("boss levels spawn a far-away boss only after smaller enemies are cleared",
   const boss = state.enemies.find((enemy) => enemy.isBoss);
   assert.ok(boss);
   assert.ok(Math.abs(boss.x - state.player.x) >= 560);
+});
+
+test("quarter boss levels spawn two bosses after smaller enemies are cleared", () => {
+  const state = createGameState("level", "rifle");
+  configureLevel(state, 25);
+  spawnLevelEnemies(state);
+
+  assert.equal(state.weapon, "shotgun");
+  assert.equal(state.pendingBoss, true);
+  assert.deepEqual(state.pendingBossTypes, ["tankBoss", "rangedBoss"]);
+
+  state.player.x = 400;
+  state.enemies = [];
+  state.kills = state.requiredKills;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  const bosses = state.enemies.filter((enemy) => enemy.isBoss);
+  assert.equal(bosses.length, 2);
+  assert.deepEqual(
+    bosses.map((boss) => boss.type).sort(),
+    ["rangedBoss", "tankBoss"],
+  );
+  assert.equal(bosses.every((boss) => Math.abs(boss.x - state.player.x) >= 560), true);
 });
 
 test("boss clears ask for the next weapon before continuing", () => {
