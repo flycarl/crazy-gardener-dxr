@@ -33,7 +33,7 @@ export const SHOTGUN = {
   downwardRecoil: 640,
   stockRange: 96,
   stockArcSeconds: 0.24,
-  stockCooldownSeconds: 0.65,
+  stockCooldownSeconds: 0.24,
   doubleShotWindowSeconds: 0.11,
   doubleShotDelaySeconds: 0.13,
 };

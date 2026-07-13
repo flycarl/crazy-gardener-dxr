@@ -708,8 +708,18 @@ test("stock swing cannot damage bosses", () => {
   assert.equal(state.enemies.length, 1);
 });
 
-test("stock swing has a longer short cooldown", () => {
-  assert.ok(SHOTGUN.stockCooldownSeconds >= 0.6);
+test("stock swing can chain again as soon as the swing finishes", () => {
+  const state = createGameState("level");
+
+  assert.equal(swingStock(state), true);
+  updateGame(
+    state,
+    { left: false, right: false, jump: false, shootHeld: false, aim: { x: 500, y: 500 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    SHOTGUN.stockArcSeconds,
+  );
+
+  assert.equal(swingStock(state), true);
 });
 
 test("spawnPowerUp creates a pickup", () => {
