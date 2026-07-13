@@ -185,6 +185,20 @@ test("cheat mode invincible prevents contact damage", () => {
   assert.equal(state.player.health, state.player.maxHealth);
 });
 
+test("cheat mode can tune zombie health", () => {
+  const state = createGameState("level");
+  state.cheats.enabled = true;
+  state.cheats.normalHealthMultiplier = 2;
+  state.cheats.slimeMidHealthMultiplier = 1.5;
+
+  const normal = createEnemy("normal", 500, WORLD.groundY, state.cheats);
+  const slime = createEnemy("slimeMid", 580, WORLD.groundY, state.cheats);
+
+  assert.equal(normal.maxHealth, ENEMY_TYPES.normal.health * 2);
+  assert.equal(normal.health, normal.maxHealth);
+  assert.equal(slime.maxHealth, ENEMY_TYPES.slimeMid.health * 1.5);
+});
+
 test("rifle fires one piercing bullet from a thirty round magazine", () => {
   const state = createGameState("level", "rifle");
 
@@ -1540,6 +1554,36 @@ test("shield door blocks three frontal rifle bullets before breaking", () => {
   assert.equal(enemy.health, enemy.maxHealth - 10);
 });
 
+test("cheat mode can tune shield door rifle hardness", () => {
+  const state = createGameState("level");
+  state.cheats.enabled = true;
+  state.cheats.shieldRifleBlocks = 5;
+  const enemy = createEnemy("fat", 250, state.player.y, state.cheats);
+  enemy.facing = -1;
+  state.enemies.push(enemy);
+
+  for (let index = 0; index < 4; index += 1) {
+    state.pellets.push({
+      x: enemy.x + enemy.w / 2,
+      y: enemy.y + enemy.h / 2,
+      vx: 900,
+      vy: 0,
+      life: 1,
+      radius: 4,
+      damage: 10,
+      damageFalloff: 1,
+      weapon: "rifle",
+      piercesRemaining: 0,
+      hitEnemyIds: [],
+    });
+    applyPelletHits(state);
+  }
+
+  assert.equal(enemy.health, enemy.maxHealth);
+  assert.equal(enemy.shieldBroken, false);
+  assert.equal(enemy.shieldRifleBlocks, 1);
+});
+
 test("shield door only blocks attacks from the front", () => {
   const state = createGameState("level");
   const enemy = createEnemy("fat", 250, state.player.y);
@@ -1924,6 +1968,31 @@ test("level bosses summon one random small zombie every five seconds", () => {
   assert.equal(state.enemies.every((enemy) => enemy.isBoss || Math.abs(enemy.x - state.player.x) >= 520), true);
 });
 
+test("cheat mode can tune boss summon interval and add count", () => {
+  const state = createGameState("level");
+  configureLevel(state, 5);
+  state.cheats.enabled = true;
+  state.cheats.bossAddSeconds = 1.25;
+  state.cheats.bossAddCount = 2;
+  const boss = createEnemy("tankBoss", 1800, WORLD.groundY);
+  state.enemies = [boss];
+  state.bossAlive = true;
+  state.bossSpawned = true;
+  state.bossAddTimer = 0;
+  state.player.x = 400;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.equal(state.enemies.filter((enemy) => enemy.summonedByBoss).length, 2);
+  assert.ok(state.bossAddTimer > 1.2);
+  assert.ok(state.bossAddTimer < 1.3);
+});
+
 test("a level boss can summon at most three small zombies", () => {
   const state = createGameState("level");
   configureLevel(state, 5);
@@ -1989,6 +2058,40 @@ test("tank boss charges every seven seconds and every five seconds under half he
   assert.ok(boss.chargeCooldown < 5.1);
 });
 
+test("cheat mode can tune tank boss charge intervals", () => {
+  const state = createGameState("level");
+  state.cheats.enabled = true;
+  state.cheats.tankChargeSeconds = 3.5;
+  state.cheats.tankEnragedChargeSeconds = 2.25;
+  const boss = createEnemy("tankBoss", 1200, WORLD.groundY);
+  boss.chargeCooldown = 0;
+  state.enemies = [boss];
+  state.player.x = 400;
+
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(boss.chargeCooldown > 3.4);
+  assert.ok(boss.chargeCooldown < 3.6);
+
+  boss.health = boss.maxHealth / 2 - 1;
+  boss.chargeCooldown = 0;
+  boss.chargeTimer = 0;
+  updateGame(
+    state,
+    { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+    { jumpPressed: false, shootPressed: false, stockPressed: false },
+    1 / 60,
+  );
+
+  assert.ok(boss.chargeCooldown > 2.2);
+  assert.ok(boss.chargeCooldown < 2.3);
+});
+
 test("ranged boss fires volleys and enrages into a ten shot ring under half health", () => {
   const originalRandom = Math.random;
   Math.random = () => 0;
@@ -2034,6 +2137,34 @@ test("ranged boss fires volleys and enrages into a ten shot ring under half heal
     );
 
     assert.equal(state.enemyProjectiles.length, 4);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test("cheat mode can tune ranged boss cooldown and projectile count", () => {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const state = createGameState("level");
+    state.cheats.enabled = true;
+    state.cheats.rangedBossCooldownSeconds = 1.1;
+    state.cheats.rangedBossShotMultiplier = 2;
+    const boss = createEnemy("rangedBoss", 900, WORLD.groundY);
+    boss.rangedCooldown = 0;
+    state.enemies = [boss];
+    state.player.x = 1280;
+
+    updateGame(
+      state,
+      { right: false, left: false, aim: { x: 1, y: 0 }, mouse: { worldX: 0, worldY: 0 } },
+      { jumpPressed: false, shootPressed: false, stockPressed: false },
+      1 / 60,
+    );
+
+    assert.equal(state.enemyProjectiles.length, 4);
+    assert.ok(boss.rangedCooldown > 1);
+    assert.ok(boss.rangedCooldown < 1.2);
   } finally {
     Math.random = originalRandom;
   }
@@ -2317,10 +2448,17 @@ test("page includes a cheat panel for tuning game parameters", () => {
   assert.match(html, /id="cheatReminder"/);
   assert.match(html, /danger-action/);
   assert.match(html, /id="cheatLevelButton"/);
+  assert.match(html, /id="cheatShieldBlocks"/);
+  assert.match(html, /id="cheatNormalHealth"/);
+  assert.match(html, /id="cheatTankBossHealth"/);
+  assert.match(html, /id="cheatBossAddSeconds"/);
+  assert.match(html, /id="cheatRangedBossShots"/);
   assert.match(html, /生成史莱姆/);
   assert.match(main, /applyCheatSettings/);
   assert.match(main, /cheatAppliedSinceOpen/);
   assert.match(main, /cheatHealthSetSinceOpen/);
+  assert.match(main, /normalHealthMultiplier/);
+  assert.match(main, /rangedBossShotMultiplier/);
   assert.match(main, /spawnCheatEnemy/);
 });
 

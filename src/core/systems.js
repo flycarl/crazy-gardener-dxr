@@ -104,6 +104,36 @@ function getCheatMultiplier(state, key) {
   return Math.max(0.1, Number(state.cheats[key] ?? 1) || 1);
 }
 
+function getCheatNumber(state, key, fallback, min = 0.1, max = 99) {
+  if (!state?.cheats?.enabled) return fallback;
+  const value = Number(state.cheats[key] ?? fallback);
+  if (!Number.isFinite(value)) return fallback;
+  return clamp(value, min, max);
+}
+
+function getCheatNumberFromSettings(cheats, key, fallback, min = 0.1, max = 99) {
+  if (!cheats?.enabled) return fallback;
+  const value = Number(cheats[key] ?? fallback);
+  if (!Number.isFinite(value)) return fallback;
+  return clamp(value, min, max);
+}
+
+function getEnemyHealthMultiplier(type, cheats) {
+  return getCheatNumberFromSettings(cheats, `${type}HealthMultiplier`, 1, 0.1, 20);
+}
+
+function getShieldRifleBlocks(cheats) {
+  return Math.round(getCheatNumberFromSettings(cheats, "shieldRifleBlocks", SHIELD_RIFLE_BLOCKS, 1, 30));
+}
+
+function getBossAddSeconds(state, fallback) {
+  return getCheatNumber(state, "bossAddSeconds", fallback, 0.2, 30);
+}
+
+function getBossAddCount(state, fallback) {
+  return Math.round(getCheatNumber(state, "bossAddCount", fallback, 1, 10));
+}
+
 function hasCheat(state, key) {
   return Boolean(state?.cheats?.enabled && state.cheats[key]);
 }
@@ -373,10 +403,12 @@ function fireEnemyProjectile(state, enemy, directionOverride = null) {
 
 function fireRangedBossAttack(state, enemy, direction) {
   const enraged = enemy.health <= enemy.maxHealth / 2;
+  const shotMultiplier = getCheatNumber(state, "rangedBossShotMultiplier", 1, 0.25, 10);
 
   if (enraged && !enemy.rangedEnraged) {
-    for (let index = 0; index < 10; index += 1) {
-      const angle = (Math.PI * 2 * index) / 10;
+    const ringShots = Math.max(1, Math.round(10 * shotMultiplier));
+    for (let index = 0; index < ringShots; index += 1) {
+      const angle = (Math.PI * 2 * index) / ringShots;
       fireEnemyProjectile(state, enemy, { x: Math.cos(angle), y: Math.sin(angle) });
     }
     enemy.rangedEnraged = true;
@@ -385,7 +417,8 @@ function fireRangedBossAttack(state, enemy, direction) {
 
   const minShots = enraged ? 3 : 2;
   const maxShots = enraged ? 4 : 2;
-  const shotCount = minShots + Math.floor(Math.random() * (maxShots - minShots + 1));
+  const baseShotCount = minShots + Math.floor(Math.random() * (maxShots - minShots + 1));
+  const shotCount = Math.max(1, Math.round(baseShotCount * shotMultiplier));
   const spread = 0.16;
 
   for (let index = 0; index < shotCount; index += 1) {
@@ -666,7 +699,7 @@ function getSpawnX(state, index) {
 
 function spawnEnemyList(state, enemyTypes, startIndex = 0) {
   return enemyTypes.map((type, index) => {
-    const enemy = createEnemy(type, getSpawnX(state, startIndex + index), WORLD.groundY);
+    const enemy = createEnemy(type, getSpawnX(state, startIndex + index), WORLD.groundY, state.cheats);
     state.enemies.push(enemy);
     return enemy;
   });
@@ -674,7 +707,7 @@ function spawnEnemyList(state, enemyTypes, startIndex = 0) {
 
 function spawnBossAdds(state) {
   const remainingCapacity = Math.max(0, ENDLESS_MAX_ENEMIES - state.enemies.length);
-  const count = Math.min(2, remainingCapacity);
+  const count = Math.min(getBossAddCount(state, 2), remainingCapacity);
   const enemyTypes = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -689,8 +722,13 @@ function spawnLevelBossAdd(state) {
     return [];
   }
 
-  const type = BOSS_ADD_TYPES[Math.floor(Math.random() * BOSS_ADD_TYPES.length)];
-  const spawned = spawnEnemyList(state, [type], state.level + state.kills + state.enemies.length + 7);
+  const remainingAdds = Math.max(0, LEVEL_BOSS_ADD_LIMIT - (state.levelBossAddsSpawned ?? 0));
+  const count = Math.min(getBossAddCount(state, 1), remainingAdds);
+  const types = [];
+  for (let index = 0; index < count; index += 1) {
+    types.push(BOSS_ADD_TYPES[Math.floor(Math.random() * BOSS_ADD_TYPES.length)]);
+  }
+  const spawned = spawnEnemyList(state, types, state.level + state.kills + state.enemies.length + 7);
   for (const enemy of spawned) {
     enemy.summonedByBoss = true;
   }
@@ -705,7 +743,7 @@ function spawnPendingBoss(state) {
 
   const template = ENEMY_TYPES[state.pendingBossType];
   const bossX = getSpawnX(state, state.level + 3);
-  const boss = createEnemy(state.pendingBossType, bossX, WORLD.groundY);
+  const boss = createEnemy(state.pendingBossType, bossX, WORLD.groundY, state.cheats);
 
   state.enemies.push(boss);
   state.pendingBoss = false;
@@ -818,7 +856,7 @@ function seekPlayerPlatform(enemy, player) {
 
 function updateTankBossCharge(state, enemy, directionX, dt) {
   enemy.chargeTimer = Math.max(0, (enemy.chargeTimer ?? 0) - dt);
-  enemy.chargeCooldown = Math.max(0, (enemy.chargeCooldown ?? TANK_BOSS_CHARGE_SECONDS) - dt);
+  enemy.chargeCooldown = Math.max(0, (enemy.chargeCooldown ?? getCheatNumber(state, "tankChargeSeconds", TANK_BOSS_CHARGE_SECONDS, 0.5, 30)) - dt);
 
   if (enemy.chargeTimer > 0) {
     enemy.vx = (enemy.chargeDirection || Math.sign(directionX || 1)) * enemy.speed * TANK_BOSS_CHARGE_MULTIPLIER;
@@ -828,7 +866,10 @@ function updateTankBossCharge(state, enemy, directionX, dt) {
   if (enemy.chargeCooldown === 0) {
     enemy.chargeDirection = Math.sign(directionX || 1);
     enemy.chargeTimer = TANK_BOSS_CHARGE_DURATION;
-    enemy.chargeCooldown = enemy.health <= enemy.maxHealth / 2 ? TANK_BOSS_ENRAGED_CHARGE_SECONDS : TANK_BOSS_CHARGE_SECONDS;
+    enemy.chargeCooldown =
+      enemy.health <= enemy.maxHealth / 2
+        ? getCheatNumber(state, "tankEnragedChargeSeconds", TANK_BOSS_ENRAGED_CHARGE_SECONDS, 0.5, 30)
+        : getCheatNumber(state, "tankChargeSeconds", TANK_BOSS_CHARGE_SECONDS, 0.5, 30);
     enemy.vx = enemy.chargeDirection * enemy.speed * TANK_BOSS_CHARGE_MULTIPLIER;
     state.effects.push(makeEffect(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, "#ff6b6b", 0.26, 28, { kind: "launch" }));
     return true;
@@ -852,7 +893,7 @@ function updateEnemies(state, dt) {
 
     if (enemy.type === "rangedBoss" && enemy.rangedCooldown === 0 && Math.abs(playerCenter.x - enemyCenter.x) <= 640) {
       fireRangedBossAttack(state, enemy, direction);
-      enemy.rangedCooldown = ENEMY_RANGED_COOLDOWN;
+      enemy.rangedCooldown = getCheatNumber(state, "rangedBossCooldownSeconds", ENEMY_RANGED_COOLDOWN, 0.2, 30);
     }
 
     if (state.mode !== "balloon") {
@@ -1105,10 +1146,11 @@ function updateLevelBookkeeping(state, dt) {
   }
 
   if (state.bossAlive && (state.levelBossAddsSpawned ?? 0) < LEVEL_BOSS_ADD_LIMIT) {
-    state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? LEVEL_BOSS_ADD_SECONDS) - dt);
+    const bossAddSeconds = getBossAddSeconds(state, LEVEL_BOSS_ADD_SECONDS);
+    state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? bossAddSeconds) - dt);
     if (state.bossAddTimer === 0) {
       spawnLevelBossAdd(state);
-      state.bossAddTimer = LEVEL_BOSS_ADD_SECONDS;
+      state.bossAddTimer = bossAddSeconds;
       state.enemiesRemaining = state.enemies.length;
     }
   }
@@ -1170,10 +1212,11 @@ function updateEndlessSpawns(state, dt) {
   state.spawnTimer = Math.max(0, state.spawnTimer - dt);
 
   if (state.endlessBossActive) {
-    state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? BOSS_ADD_SECONDS) - dt);
+    const bossAddSeconds = getBossAddSeconds(state, BOSS_ADD_SECONDS);
+    state.bossAddTimer = Math.max(0, (state.bossAddTimer ?? bossAddSeconds) - dt);
     if (state.bossAddTimer === 0) {
       spawnBossAdds(state);
-      state.bossAddTimer = BOSS_ADD_SECONDS;
+      state.bossAddTimer = bossAddSeconds;
     }
 
     state.enemiesRemaining = state.enemies.length;
@@ -1194,7 +1237,7 @@ function updateEndlessSpawns(state, dt) {
     }
 
     const bossType = state.pendingEndlessBossType ?? (state.wave % 40 === 0 ? "rangedBoss" : "tankBoss");
-    const boss = createEnemy(bossType, getSpawnX(state, state.wave + 5), WORLD.groundY);
+    const boss = createEnemy(bossType, getSpawnX(state, state.wave + 5), WORLD.groundY, state.cheats);
     state.enemies.push(boss);
     state.pendingEndlessBoss = false;
     state.pendingEndlessBossType = null;
@@ -1245,8 +1288,10 @@ function updateEndlessSpawns(state, dt) {
   state.bossAlive = state.enemies.some((enemy) => enemy.isBoss);
 }
 
-export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
+export function createEnemy(type = "normal", x = 0, y = WORLD.groundY, cheats = null) {
   const template = ENEMY_TYPES[type] ?? ENEMY_TYPES.normal;
+  const maxHealth = template.health * getEnemyHealthMultiplier(type, cheats);
+  const shieldRifleBlocks = template.shield ? getShieldRifleBlocks(cheats) : 0;
 
   return {
     id: nextEnemyId++,
@@ -1258,8 +1303,8 @@ export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
     vy: 0,
     w: template.width,
     h: template.height,
-    health: template.health,
-    maxHealth: template.health,
+    health: maxHealth,
+    maxHealth,
     speed: template.speed,
     damage: template.damage,
     score: template.score,
@@ -1269,7 +1314,7 @@ export function createEnemy(type = "normal", x = 0, y = WORLD.groundY) {
     jumpVelocity: template.jumpVelocity ?? 0,
     hasShield: Boolean(template.shield),
     shieldBroken: false,
-    shieldRifleBlocks: template.shield ? SHIELD_RIFLE_BLOCKS : 0,
+    shieldRifleBlocks,
     blockedShotIds: [],
     flying: Boolean(template.flying),
     balloonHits: 0,
@@ -1364,7 +1409,7 @@ export function configureBalloonLevel(state, level) {
   WORLD.walls = [];
 
   for (let index = 0; index < BALLOON_MODE.targetKills; index += 1) {
-    const enemy = createEnemy("balloon", BALLOON_START_X[index] + level * 24, WORLD.groundY);
+    const enemy = createEnemy("balloon", BALLOON_START_X[index] + level * 24, WORLD.groundY, state.cheats);
     enemy.baseY = 115 + ((index * 43 + level * 17) % 170);
     enemy.y = enemy.baseY;
     enemy.vx = (index % 2 === 0 ? 1 : -1) * (42 + level * 7 + index * 9);

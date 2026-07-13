@@ -39,6 +39,22 @@ const cheatSpeed = document.querySelector("#cheatSpeed");
 const cheatJump = document.querySelector("#cheatJump");
 const cheatHealth = document.querySelector("#cheatHealth");
 const cheatLevel = document.querySelector("#cheatLevel");
+const cheatShieldBlocks = document.querySelector("#cheatShieldBlocks");
+const cheatNormalHealth = document.querySelector("#cheatNormalHealth");
+const cheatFastHealth = document.querySelector("#cheatFastHealth");
+const cheatFatHealth = document.querySelector("#cheatFatHealth");
+const cheatSlimeLowHealth = document.querySelector("#cheatSlimeLowHealth");
+const cheatSlimeMidHealth = document.querySelector("#cheatSlimeMidHealth");
+const cheatSlimeHighHealth = document.querySelector("#cheatSlimeHighHealth");
+const cheatBalloonHealth = document.querySelector("#cheatBalloonHealth");
+const cheatTankBossHealth = document.querySelector("#cheatTankBossHealth");
+const cheatRangedBossHealth = document.querySelector("#cheatRangedBossHealth");
+const cheatBossAddSeconds = document.querySelector("#cheatBossAddSeconds");
+const cheatBossAddCount = document.querySelector("#cheatBossAddCount");
+const cheatTankChargeSeconds = document.querySelector("#cheatTankChargeSeconds");
+const cheatTankEnragedChargeSeconds = document.querySelector("#cheatTankEnragedChargeSeconds");
+const cheatRangedBossCooldown = document.querySelector("#cheatRangedBossCooldown");
+const cheatRangedBossShots = document.querySelector("#cheatRangedBossShots");
 const cheatReminder = document.querySelector("#cheatReminder");
 const cheatApplyButton = document.querySelector("#cheatApplyButton");
 const cheatHealButton = document.querySelector("#cheatHealButton");
@@ -67,6 +83,22 @@ let selectedCheats = {
   damageMultiplier: 1,
   speedMultiplier: 1,
   jumpMultiplier: 1,
+  shieldRifleBlocks: 3,
+  normalHealthMultiplier: 1,
+  fastHealthMultiplier: 1,
+  fatHealthMultiplier: 1,
+  slimeLowHealthMultiplier: 1,
+  slimeMidHealthMultiplier: 1,
+  slimeHighHealthMultiplier: 1,
+  balloonHealthMultiplier: 1,
+  tankBossHealthMultiplier: 1,
+  rangedBossHealthMultiplier: 1,
+  bossAddSeconds: 5,
+  bossAddCount: 1,
+  tankChargeSeconds: 7,
+  tankEnragedChargeSeconds: 5,
+  rangedBossCooldownSeconds: 2.8,
+  rangedBossShotMultiplier: 1,
 };
 let paused = false;
 let cheatAppliedSinceOpen = false;
@@ -135,6 +167,22 @@ function applyCheatSettings() {
     damageMultiplier: readNumber(cheatDamage, 1, 0.1, 20),
     speedMultiplier: readNumber(cheatSpeed, 1, 0.1, 5),
     jumpMultiplier: readNumber(cheatJump, 1, 0.1, 5),
+    shieldRifleBlocks: Math.round(readNumber(cheatShieldBlocks, 3, 1, 30)),
+    normalHealthMultiplier: readNumber(cheatNormalHealth, 1, 0.1, 20),
+    fastHealthMultiplier: readNumber(cheatFastHealth, 1, 0.1, 20),
+    fatHealthMultiplier: readNumber(cheatFatHealth, 1, 0.1, 20),
+    slimeLowHealthMultiplier: readNumber(cheatSlimeLowHealth, 1, 0.1, 20),
+    slimeMidHealthMultiplier: readNumber(cheatSlimeMidHealth, 1, 0.1, 20),
+    slimeHighHealthMultiplier: readNumber(cheatSlimeHighHealth, 1, 0.1, 20),
+    balloonHealthMultiplier: readNumber(cheatBalloonHealth, 1, 0.1, 20),
+    tankBossHealthMultiplier: readNumber(cheatTankBossHealth, 1, 0.1, 20),
+    rangedBossHealthMultiplier: readNumber(cheatRangedBossHealth, 1, 0.1, 20),
+    bossAddSeconds: readNumber(cheatBossAddSeconds, 5, 0.2, 30),
+    bossAddCount: Math.round(readNumber(cheatBossAddCount, 1, 1, 10)),
+    tankChargeSeconds: readNumber(cheatTankChargeSeconds, 7, 0.5, 30),
+    tankEnragedChargeSeconds: readNumber(cheatTankEnragedChargeSeconds, 5, 0.5, 30),
+    rangedBossCooldownSeconds: readNumber(cheatRangedBossCooldown, 2.8, 0.2, 30),
+    rangedBossShotMultiplier: readNumber(cheatRangedBossShots, 1, 0.25, 10),
   };
 
   if (state) {
@@ -155,6 +203,22 @@ function updateCheatInputs() {
   if (cheatDamage) cheatDamage.value = String(cheats.damageMultiplier ?? 1);
   if (cheatSpeed) cheatSpeed.value = String(cheats.speedMultiplier ?? 1);
   if (cheatJump) cheatJump.value = String(cheats.jumpMultiplier ?? 1);
+  if (cheatShieldBlocks) cheatShieldBlocks.value = String(cheats.shieldRifleBlocks ?? 3);
+  if (cheatNormalHealth) cheatNormalHealth.value = String(cheats.normalHealthMultiplier ?? 1);
+  if (cheatFastHealth) cheatFastHealth.value = String(cheats.fastHealthMultiplier ?? 1);
+  if (cheatFatHealth) cheatFatHealth.value = String(cheats.fatHealthMultiplier ?? 1);
+  if (cheatSlimeLowHealth) cheatSlimeLowHealth.value = String(cheats.slimeLowHealthMultiplier ?? 1);
+  if (cheatSlimeMidHealth) cheatSlimeMidHealth.value = String(cheats.slimeMidHealthMultiplier ?? 1);
+  if (cheatSlimeHighHealth) cheatSlimeHighHealth.value = String(cheats.slimeHighHealthMultiplier ?? 1);
+  if (cheatBalloonHealth) cheatBalloonHealth.value = String(cheats.balloonHealthMultiplier ?? 1);
+  if (cheatTankBossHealth) cheatTankBossHealth.value = String(cheats.tankBossHealthMultiplier ?? 1);
+  if (cheatRangedBossHealth) cheatRangedBossHealth.value = String(cheats.rangedBossHealthMultiplier ?? 1);
+  if (cheatBossAddSeconds) cheatBossAddSeconds.value = String(cheats.bossAddSeconds ?? 5);
+  if (cheatBossAddCount) cheatBossAddCount.value = String(cheats.bossAddCount ?? 1);
+  if (cheatTankChargeSeconds) cheatTankChargeSeconds.value = String(cheats.tankChargeSeconds ?? 7);
+  if (cheatTankEnragedChargeSeconds) cheatTankEnragedChargeSeconds.value = String(cheats.tankEnragedChargeSeconds ?? 5);
+  if (cheatRangedBossCooldown) cheatRangedBossCooldown.value = String(cheats.rangedBossCooldownSeconds ?? 2.8);
+  if (cheatRangedBossShots) cheatRangedBossShots.value = String(cheats.rangedBossShotMultiplier ?? 1);
   if (cheatHealth) cheatHealth.value = String(Math.ceil(state?.player?.health ?? 100));
   if (cheatLevel) cheatLevel.value = String(state?.mode === "level" ? state.level : savedLevel);
 }
@@ -220,7 +284,7 @@ function jumpToCheatLevel() {
 function spawnCheatEnemy(type) {
   if (!state) return;
   const x = Math.min(state.player.x + 560, 3380);
-  const enemy = createEnemy(type, x);
+  const enemy = createEnemy(type, x, undefined, state.cheats);
   state.enemies.push(enemy);
   state.enemiesRemaining = state.enemies.length;
 }
