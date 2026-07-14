@@ -980,7 +980,7 @@ test("endless mode keeps each borrowed wave within the active enemy cap", () => 
   assert.ok(state.endlessLevelStyle <= 100);
 });
 
-test("endless mode adds walls and limits active zombies to three waves", () => {
+test("endless mode removes walls and limits active zombies to three waves", () => {
   const state = createGameState("endless");
   configureEndlessMode(state);
   state.wave = 12;
@@ -997,7 +997,7 @@ test("endless mode adds walls and limits active zombies to three waves", () => {
     1 / 60,
   );
 
-  assert.ok(WORLD.walls.length > 0);
+  assert.equal(WORLD.walls.length, 0);
   assert.ok(state.enemies.length <= 15);
   assert.equal(state.wave, 12);
 });
@@ -2458,21 +2458,12 @@ test("enemy projectiles knock Dave back when they hit", () => {
   assert.ok(player.vy < 0);
 });
 
-test("endless mode separates walls from platforms", () => {
+test("endless mode has platforms without walls", () => {
   const state = createGameState("endless");
   configureEndlessMode(state);
 
-  for (const wall of WORLD.walls) {
-    for (const platform of WORLD.platforms) {
-      const overlap =
-        wall.x < platform.x + platform.w &&
-        wall.x + wall.w > platform.x &&
-        wall.y < platform.y + platform.h &&
-        wall.y + wall.h > platform.y;
-
-      assert.equal(overlap, false);
-    }
-  }
+  assert.ok(WORLD.platforms.length > 0);
+  assert.equal(WORLD.walls.length, 0);
 });
 
 test("menu explains balloon mode uses pistol and ignores shotgun and rifle settings", () => {

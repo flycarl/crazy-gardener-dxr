@@ -41,11 +41,7 @@ const ENDLESS_PLATFORMS = [
   { x: 1380, y: 462, w: 250, h: 24 },
   { x: 2360, y: 502, w: 220, h: 24 },
 ];
-const ENDLESS_WALLS = [
-  { x: 1060, y: WORLD.groundY - 88, w: 40, h: 88 },
-  { x: 1880, y: WORLD.groundY - 112, w: 44, h: 112 },
-  { x: 3060, y: WORLD.groundY - 96, w: 42, h: 96 },
-];
+const ENDLESS_WALLS = [];
 let nextEnemyId = 1;
 let nextPickupId = 1;
 let nextEffectId = 1;
@@ -1207,7 +1203,7 @@ function updateEndlessSpawns(state, dt) {
 
   if (!state.endlessWallsReady) {
     WORLD.platforms = ENDLESS_PLATFORMS.map((platform) => ({ ...platform }));
-    WORLD.walls = ENDLESS_WALLS.map((wall) => ({ ...wall }));
+    WORLD.walls = [];
     state.endlessWallsReady = true;
   }
 
@@ -1382,7 +1378,7 @@ export function configureEndlessMode(state) {
   state.pendingEndlessBossType = null;
   state.endlessBossActive = false;
   WORLD.platforms = ENDLESS_PLATFORMS.map((platform) => ({ ...platform }));
-  WORLD.walls = ENDLESS_WALLS.map((wall) => ({ ...wall }));
+  WORLD.walls = [];
   return state;
 }
 
