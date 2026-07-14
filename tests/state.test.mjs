@@ -922,12 +922,17 @@ test("endless mode starts the next wave when only two enemies remain", () => {
   assert.ok(state.enemies.length > 2);
 });
 
-test("endless mode randomly borrows a level plan from levels one to one hundred", () => {
+test("endless mode picks one random level terrain and keeps it fixed", () => {
   const originalRandom = Math.random;
   Math.random = () => 0.99;
   try {
     const state = createGameState("endless");
     configureEndlessMode(state);
+    assert.equal(state.endlessLevelStyle, 100);
+    assert.deepEqual(WORLD.platforms, LEVELS[99].platforms);
+    assert.equal(WORLD.walls.length, 0);
+
+    Math.random = () => 0;
     state.wave = 3;
     state.spawnTimer = 0;
     state.enemies = [];
@@ -941,6 +946,7 @@ test("endless mode randomly borrows a level plan from levels one to one hundred"
 
     assert.equal(state.endlessLevelStyle, 100);
     assert.deepEqual(WORLD.platforms, LEVELS[99].platforms);
+    assert.equal(WORLD.walls.length, 0);
     assert.deepEqual(state.enemies.map((enemy) => enemy.type), LEVELS[99].enemies.slice(0, 15));
   } finally {
     Math.random = originalRandom;

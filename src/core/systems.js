@@ -681,7 +681,7 @@ function applyEndlessLevelStyle(state, levelStyle) {
   const plan = getLevelPlan(style);
   state.endlessLevelStyle = style;
   WORLD.platforms = plan.platforms.map((platform) => ({ ...platform }));
-  WORLD.walls = getLevelWalls(style);
+  WORLD.walls = [];
   return plan;
 }
 
@@ -1202,7 +1202,7 @@ function updateEndlessSpawns(state, dt) {
   }
 
   if (!state.endlessWallsReady) {
-    WORLD.platforms = ENDLESS_PLATFORMS.map((platform) => ({ ...platform }));
+    applyEndlessLevelStyle(state, state.endlessLevelStyle ?? chooseEndlessLevelStyle());
     WORLD.walls = [];
     state.endlessWallsReady = true;
   }
@@ -1266,7 +1266,7 @@ function updateEndlessSpawns(state, dt) {
   }
 
   const wave = state.wave;
-  const levelPlan = applyEndlessLevelStyle(state, chooseEndlessLevelStyle());
+  const levelPlan = getLevelPlan(state.endlessLevelStyle ?? chooseEndlessLevelStyle());
   const enemyTypes = levelPlan.enemies;
 
   let remainingCapacity = Math.max(0, ENDLESS_MAX_ENEMIES - state.enemies.length);
@@ -1377,8 +1377,8 @@ export function configureEndlessMode(state) {
   state.pendingEndlessBoss = false;
   state.pendingEndlessBossType = null;
   state.endlessBossActive = false;
-  WORLD.platforms = ENDLESS_PLATFORMS.map((platform) => ({ ...platform }));
-  WORLD.walls = [];
+  applyEndlessLevelStyle(state, chooseEndlessLevelStyle());
+  state.endlessWallsReady = true;
   return state;
 }
 
