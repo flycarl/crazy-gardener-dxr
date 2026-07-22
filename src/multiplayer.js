@@ -1,7 +1,15 @@
-const ROOM_PREFIX = "dxr";
+const ROOM_PREFIX = "dxr-room";
 
-function makeRoomId() {
-  return `${ROOM_PREFIX}-${Math.random().toString(36).slice(2, 6)}-${Math.random().toString(36).slice(2, 6)}`;
+function makeRoomCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function roomCodeToPeerId(roomCode) {
+  return `${ROOM_PREFIX}-${roomCode}`;
+}
+
+function normalizeRoomCode(value) {
+  return String(value ?? "").trim().replace(/\D/g, "").slice(0, 4);
 }
 
 function clonePacket(value) {
@@ -28,7 +36,13 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
 
     peer?.destroy();
     peer = new window.Peer(id);
-    peer.on("error", (error) => setStatus(`联机错误：${error.type ?? error.message}`));
+    peer.on("error", (error) => {
+      if (error.type === "unavailable-id") {
+        setStatus("这个4位房间号刚好被占用了，请重新创建一次。");
+        return;
+      }
+      setStatus(`联机错误：${error.type ?? error.message}`);
+    });
     peer.on("disconnected", () => setStatus("房间信令断开，正在等待重连。"));
     return peer;
   }
@@ -71,26 +85,27 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
     mode = nextMode;
     localName = name || "房主";
     remoteName = "玩家2";
-    const roomId = makeRoomId();
+    const roomCode = makeRoomCode();
+    const roomId = roomCodeToPeerId(roomCode);
     setStatus("正在创建房间...");
     const nextPeer = ensurePeer(roomId);
     if (!nextPeer) return null;
 
     nextPeer.on("open", () => {
-      onRoomCode?.(roomId);
-      setStatus(`房间号：${roomId}，等待玩家加入。`);
+      onRoomCode?.(roomCode);
+      setStatus(`房间号：${roomCode}，等待玩家加入。`);
     });
     nextPeer.on("connection", (conn) => {
       wireConnection(conn);
     });
 
-    return roomId;
+    return roomCode;
   }
 
   function joinRoom(roomId, name = "玩家2") {
-    const cleanRoomId = roomId.trim();
-    if (!cleanRoomId) {
-      setStatus("请输入房间号。");
+    const cleanRoomCode = normalizeRoomCode(roomId);
+    if (cleanRoomCode.length !== 4) {
+      setStatus("请输入4位房间号。");
       return false;
     }
 
@@ -104,7 +119,7 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
 
     nextPeer.on("open", () => {
       setStatus("正在加入房间...");
-      wireConnection(nextPeer.connect(cleanRoomId));
+      wireConnection(nextPeer.connect(roomCodeToPeerId(cleanRoomCode)));
     });
     return true;
   }
