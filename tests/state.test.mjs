@@ -2488,13 +2488,20 @@ test("page includes PeerJS multiplayer room controls", () => {
   assert.match(html, /peerjs/);
   assert.match(html, /id="createDuelRoom"/);
   assert.match(html, /id="createCoopRoom"/);
+  assert.match(html, /id="playerNameInput"/);
   assert.match(html, /id="roomCodeInput"/);
   assert.match(main, /createMultiplayerClient/);
   assert.match(main, /startMultiplayerHost/);
   assert.match(main, /sendSnapshot/);
+  assert.match(main, /联机模式不能开作弊/);
+  assert.match(main, /killMessage/);
+  assert.match(main, /killFeed/);
   assert.match(multiplayer, /createRoom/);
   assert.match(multiplayer, /joinRoom/);
+  assert.match(multiplayer, /guest-ready/);
+  assert.match(multiplayer, /hostName/);
   assert.match(render, /drawRemotePlayers/);
+  assert.match(render, /drawKillFeed/);
 });
 
 test("page includes an in-game pause menu with resume and main menu actions", () => {

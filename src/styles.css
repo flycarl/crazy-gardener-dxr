@@ -70,6 +70,29 @@ body {
   gap: 12px;
 }
 
+.multiplayer-menu {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.multiplayer-menu input {
+  width: min(210px, calc(100vw - 48px));
+  border: 2px solid rgba(244, 211, 94, 0.76);
+  border-radius: 6px;
+  padding: 11px 12px;
+  background: rgba(13, 25, 15, 0.84);
+  color: #fff8d7;
+  font: inherit;
+  font-weight: 700;
+}
+
+.multiplayer-menu input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 248, 215, 0.42);
+}
+
 button {
   min-width: 148px;
   border: 2px solid #f3d36b;

@@ -8,11 +8,13 @@ function clonePacket(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-export function createMultiplayerClient({ onStatus, onGuestInput, onSnapshot, onStart }) {
+export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, onSnapshot, onStart, onPeerName }) {
   let peer = null;
   let connection = null;
   let role = "solo";
   let mode = null;
+  let localName = "玩家";
+  let remoteName = "玩家";
 
   function setStatus(message) {
     onStatus?.(message);
@@ -34,13 +36,19 @@ export function createMultiplayerClient({ onStatus, onGuestInput, onSnapshot, on
   function wireConnection(conn) {
     connection = conn;
     connection.on("open", () => {
-      setStatus(role === "host" ? "玩家已加入，房间已连接。" : "已加入房间。");
+      setStatus(role === "host" ? "玩家已加入，房间已连接。" : "已加入房间，等待房主开始。");
       if (role === "guest") {
-        connection.send({ type: "guest-ready" });
+        connection.send({ type: "guest-ready", name: localName });
       }
-      onStart?.({ role, mode });
+      if (role === "host") onStart?.({ role, mode });
     });
     connection.on("data", (packet) => {
+      if (packet?.type === "guest-ready" && role === "host") {
+        remoteName = packet.name || "玩家2";
+        onPeerName?.({ role, localName, remoteName });
+        setStatus(`${remoteName} 已加入，房间已连接。`);
+        connection.send({ type: "host-start", mode, hostName: localName });
+      }
       if (packet?.type === "guest-input" && role === "host") {
         onGuestInput?.(packet);
       }
@@ -49,29 +57,37 @@ export function createMultiplayerClient({ onStatus, onGuestInput, onSnapshot, on
       }
       if (packet?.type === "host-start" && role === "guest") {
         mode = packet.mode;
-        onStart?.({ role, mode });
+        remoteName = packet.hostName || "房主";
+        setStatus(`已进入${mode === "coop" ? "双人无尽" : "对战"}房间。`);
+        onPeerName?.({ role, localName, remoteName });
+        onStart?.({ role, mode, hostName: remoteName, guestName: localName });
       }
     });
     connection.on("close", () => setStatus("联机已断开。"));
   }
 
-  function createRoom(nextMode) {
+  function createRoom(nextMode, name = "房主") {
     role = "host";
     mode = nextMode;
+    localName = name || "房主";
+    remoteName = "玩家2";
     const roomId = makeRoomId();
+    setStatus("正在创建房间...");
     const nextPeer = ensurePeer(roomId);
     if (!nextPeer) return null;
 
-    nextPeer.on("open", () => setStatus(`房间号：${roomId}`));
+    nextPeer.on("open", () => {
+      onRoomCode?.(roomId);
+      setStatus(`房间号：${roomId}，等待玩家加入。`);
+    });
     nextPeer.on("connection", (conn) => {
       wireConnection(conn);
-      conn.on("open", () => conn.send({ type: "host-start", mode }));
     });
 
     return roomId;
   }
 
-  function joinRoom(roomId) {
+  function joinRoom(roomId, name = "玩家2") {
     const cleanRoomId = roomId.trim();
     if (!cleanRoomId) {
       setStatus("请输入房间号。");
@@ -80,6 +96,9 @@ export function createMultiplayerClient({ onStatus, onGuestInput, onSnapshot, on
 
     role = "guest";
     mode = null;
+    localName = name || "玩家2";
+    remoteName = "房主";
+    setStatus("正在加入房间...");
     const nextPeer = ensurePeer();
     if (!nextPeer) return false;
 
@@ -119,6 +138,8 @@ export function createMultiplayerClient({ onStatus, onGuestInput, onSnapshot, on
     peer = null;
     role = "solo";
     mode = null;
+    localName = "玩家";
+    remoteName = "玩家";
     setStatus("联机已关闭。");
   }
 

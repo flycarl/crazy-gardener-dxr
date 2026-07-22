@@ -695,7 +695,7 @@ function drawRemotePlayers(context, state) {
     context.fillStyle = "#23547a";
     context.font = "bold 13px Arial";
     context.textAlign = "center";
-    context.fillText("队友", centerX, y - 10);
+    context.fillText(player.name || "队友", centerX, y - 10);
 
     context.fillStyle = "rgba(0, 0, 0, 0.55)";
     context.fillRect(x, y - 24, player.w, 6);
@@ -713,6 +713,39 @@ function drawRemoteShots(context, state) {
     context.arc(screenX(state, shot.x), screenY(state, shot.y), 5, 0, Math.PI * 2);
     context.fill();
   }
+  context.restore();
+}
+
+function drawKillFeed(context, canvas, state) {
+  const reports = state.killFeed ?? [];
+  if (reports.length === 0) return;
+
+  context.save();
+  context.font = "bold 17px Arial";
+  context.textBaseline = "top";
+  context.fillStyle = "rgba(10, 12, 10, 0.68)";
+  context.strokeStyle = "rgba(255, 248, 215, 0.42)";
+  context.lineWidth = 1;
+  context.fillRect(18, 112, 98, 30);
+  context.strokeRect(18, 112, 98, 30);
+  context.fillStyle = "#ffef9a";
+  context.textAlign = "left";
+  context.fillText("击杀报告", 28, 118);
+
+  reports.forEach((report, index) => {
+    const alpha = Math.max(0.18, Math.min(1, report.life / 0.8));
+    const y = 112 + index * 36;
+    const width = Math.min(360, Math.max(190, context.measureText(report.text).width + 28));
+    const x = canvas.width - width - 18;
+    context.globalAlpha = alpha;
+    context.fillStyle = "rgba(10, 12, 10, 0.74)";
+    context.strokeStyle = "rgba(236, 81, 72, 0.82)";
+    context.fillRect(x, y, width, 30);
+    context.strokeRect(x, y, width, 30);
+    context.fillStyle = "#fff8d7";
+    context.textAlign = "right";
+    context.fillText(report.text, canvas.width - 32, y + 6);
+  });
   context.restore();
 }
 
@@ -856,5 +889,6 @@ export function drawGame(context, canvas, state, input) {
   drawRemotePlayers(context, state);
   drawFloatTexts(context, state);
   drawBossBar(context, canvas, state);
+  drawKillFeed(context, canvas, state);
   updateHud(state);
 }

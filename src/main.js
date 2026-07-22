@@ -33,6 +33,7 @@ const levelModeButton = document.querySelector("#levelMode");
 const createDuelRoomButton = document.querySelector("#createDuelRoom");
 const createCoopRoomButton = document.querySelector("#createCoopRoom");
 const joinRoomButton = document.querySelector("#joinRoomButton");
+const playerNameInput = document.querySelector("#playerNameInput");
 const roomCodeInput = document.querySelector("#roomCodeInput");
 const multiplayerStatus = document.querySelector("#multiplayerStatus");
 const cheatMenuButton = document.querySelector("#cheatMenuButton");
@@ -75,6 +76,7 @@ const input = createInput(canvas);
 const sound = createSoundPlayer();
 
 const LEVEL_PROGRESS_KEY = "crazyGardenerLevelProgress";
+const PLAYER_NAME_KEY = "crazyGardenerPlayerName";
 
 let state = null;
 let lastTime = performance.now();
@@ -82,6 +84,7 @@ let selectedWeapon = "shotgun";
 let selectedRifleMode = "single";
 let highScore = Number(localStorage.getItem("crazyGardenerHighScore") ?? 0);
 let savedLevel = Math.max(1, Number(localStorage.getItem(LEVEL_PROGRESS_KEY) ?? 1) || 1);
+let playerName = localStorage.getItem(PLAYER_NAME_KEY) || "";
 let selectedCheats = {
   enabled: false,
   invincible: false,
@@ -115,9 +118,9 @@ let snapshotTimer = 0;
 const multiplayer = createMultiplayerClient({
   onStatus: (message) => {
     if (multiplayerStatus) multiplayerStatus.textContent = `联机：${message}`;
-    if (roomCodeInput && message.startsWith("房间号：")) {
-      roomCodeInput.value = message.replace("房间号：", "");
-    }
+  },
+  onRoomCode: (roomCode) => {
+    if (roomCodeInput) roomCodeInput.value = roomCode;
   },
   onGuestInput: (packet) => {
     remoteInputPacket = packet;
@@ -133,7 +136,29 @@ const multiplayer = createMultiplayerClient({
       startMultiplayerHost(mode);
     }
   },
+  onPeerName: ({ localName, remoteName }) => {
+    if (!state?.multiplayer) return;
+    if (state.multiplayer.role === "host") {
+      state.multiplayer.hostName = localName;
+      state.multiplayer.guestName = remoteName;
+      if (state.remotePlayers?.[0]) state.remotePlayers[0].name = remoteName;
+    } else {
+      state.multiplayer.hostName = remoteName;
+      state.multiplayer.guestName = localName;
+    }
+  },
 });
+
+if (playerNameInput) playerNameInput.value = playerName;
+
+function getPlayerName() {
+  const rawName = (playerNameInput?.value ?? playerName).trim();
+  const cleanName = rawName.slice(0, 14) || `玩家${Math.floor(1000 + Math.random() * 9000)}`;
+  playerName = cleanName;
+  if (playerNameInput) playerNameInput.value = cleanName;
+  localStorage.setItem(PLAYER_NAME_KEY, cleanName);
+  return cleanName;
+}
 
 function getAimDirection(currentState) {
   const player = currentState.player;
@@ -172,33 +197,22 @@ function start(mode) {
   paused = false;
 }
 
-function applyCoopEnemyBoost(nextState) {
-  nextState.cheats = {
-    ...nextState.cheats,
-    enabled: true,
-    normalHealthMultiplier: Math.max(nextState.cheats.normalHealthMultiplier ?? 1, 1.55),
-    fastHealthMultiplier: Math.max(nextState.cheats.fastHealthMultiplier ?? 1, 1.55),
-    fatHealthMultiplier: Math.max(nextState.cheats.fatHealthMultiplier ?? 1, 1.55),
-    slimeLowHealthMultiplier: Math.max(nextState.cheats.slimeLowHealthMultiplier ?? 1, 1.55),
-    slimeMidHealthMultiplier: Math.max(nextState.cheats.slimeMidHealthMultiplier ?? 1, 1.55),
-    slimeHighHealthMultiplier: Math.max(nextState.cheats.slimeHighHealthMultiplier ?? 1, 1.55),
-    tankBossHealthMultiplier: Math.max(nextState.cheats.tankBossHealthMultiplier ?? 1, 1.4),
-    rangedBossHealthMultiplier: Math.max(nextState.cheats.rangedBossHealthMultiplier ?? 1, 1.4),
-  };
-}
-
 function startMultiplayerHost(mode) {
   sound.unlock();
   sound.play("ui");
+  const hostName = getPlayerName();
+  const previousGuestName = state?.multiplayer?.guestName || state?.remotePlayers?.[0]?.name || "玩家2";
   const gameMode = mode === "coop" ? "endless" : "duel";
   state = createGameState(gameMode === "duel" ? "level" : gameMode, selectedWeapon, selectedRifleMode);
   state.mode = gameMode;
   state.highScore = highScore;
-  state.cheats = { ...selectedCheats };
-  state.multiplayer = { role: "host", mode, connected: true };
+  state.cheats = { ...selectedCheats, enabled: false, invincible: false, infiniteAmmo: false };
+  state.multiplayer = { role: "host", mode, connected: true, hostName, guestName: previousGuestName };
+  state.killFeed = [];
   state.remotePlayers = [
     {
       id: "guest",
+      name: previousGuestName,
       x: state.player.x + 120,
       y: state.player.y,
       vx: 0,
@@ -215,7 +229,6 @@ function startMultiplayerHost(mode) {
   state.remoteShots = [];
 
   if (mode === "coop") {
-    applyCoopEnemyBoost(state);
     configureEndlessMode(state);
   } else {
     state.enemies = [];
@@ -230,6 +243,14 @@ function startMultiplayerHost(mode) {
   cheatPanel.classList.add("hidden");
   pauseMenuButton.classList.remove("hidden");
   paused = false;
+}
+
+function addKillReport(currentState, killerName, victimName) {
+  const text = `${killerName} 击杀了 ${victimName}`;
+  currentState.killFeed = [{ text, life: 4, side: "right" }, ...(currentState.killFeed ?? []).slice(0, 3)];
+  currentState.multiplayer ??= {};
+  currentState.multiplayer.killMessage = text;
+  currentState.status = "gameover";
 }
 
 function updateRemoteAvatar(currentState, packet, dt) {
@@ -298,7 +319,13 @@ function updateRemoteShots(currentState, dt) {
       const player = currentState.player;
       if (shot.x >= player.x && shot.x <= player.x + player.w && shot.y >= player.y && shot.y <= player.y + player.h) {
         player.health = Math.max(0, player.health - shot.damage);
-        if (player.health === 0) currentState.status = "gameover";
+        if (player.health === 0) {
+          addKillReport(
+            currentState,
+            currentState.multiplayer.guestName ?? "玩家2",
+            currentState.multiplayer.hostName ?? "房主",
+          );
+        }
         keep = false;
       }
     }
@@ -307,6 +334,41 @@ function updateRemoteShots(currentState, dt) {
   }
 
   currentState.remoteShots = remaining;
+}
+
+function updateHostShotsAgainstRemote(currentState) {
+  if (currentState?.multiplayer?.mode !== "duel" || currentState.status !== "playing") return;
+  const remotePlayer = currentState.remotePlayers?.[0];
+  if (!remotePlayer || remotePlayer.health <= 0) return;
+
+  for (const pellet of currentState.pellets) {
+    if (pellet.life <= 0) continue;
+    const hit =
+      pellet.x >= remotePlayer.x &&
+      pellet.x <= remotePlayer.x + remotePlayer.w &&
+      pellet.y >= remotePlayer.y &&
+      pellet.y <= remotePlayer.y + remotePlayer.h;
+    if (!hit) continue;
+
+    remotePlayer.health = Math.max(0, remotePlayer.health - (pellet.damage ?? 10));
+    pellet.life = 0;
+    if (remotePlayer.health === 0) {
+      addKillReport(
+        currentState,
+        currentState.multiplayer.hostName ?? "房主",
+        currentState.multiplayer.guestName ?? remotePlayer.name ?? "玩家2",
+      );
+      break;
+    }
+  }
+}
+
+function updateKillFeed(currentState, dt) {
+  if (!currentState?.killFeed?.length) return;
+  for (const report of currentState.killFeed) {
+    report.life -= dt;
+  }
+  currentState.killFeed = currentState.killFeed.filter((report) => report.life > 0);
 }
 
 function captureGuestInput(pressed) {
@@ -339,6 +401,13 @@ function readNumber(inputElement, fallback, min, max) {
 }
 
 function applyCheatSettings() {
+  if (state?.multiplayer?.connected) {
+    if (multiplayerStatus) multiplayerStatus.textContent = "联机：联机模式不能开作弊。";
+    if (cheatEnabled) cheatEnabled.checked = false;
+    cheatReminder?.classList.add("hidden");
+    return;
+  }
+
   cheatReminder?.classList.add("hidden");
   selectedCheats = {
     enabled: Boolean(cheatEnabled?.checked),
@@ -406,6 +475,11 @@ function updateCheatInputs() {
 function openCheatPanel() {
   sound.unlock();
   sound.play("ui");
+  if (state?.multiplayer?.connected) {
+    if (multiplayerStatus) multiplayerStatus.textContent = "联机：联机模式不能开作弊。";
+    cheatPanel.classList.add("hidden");
+    return;
+  }
   cheatAppliedSinceOpen = false;
   cheatHealthSetSinceOpen = false;
   cheatReminder?.classList.add("hidden");
@@ -537,8 +611,14 @@ function updateFailurePanel() {
     return;
   }
 
-  failureTitle.textContent = state.mode === "balloon" ? "时间到了！" : "戴夫倒下了";
-  retryButton.textContent = state.mode === "endless" ? "从零开始" : "重来本关";
+  failureTitle.textContent = state.multiplayer?.killMessage ?? (state.mode === "balloon" ? "时间到了！" : "戴夫倒下了");
+  retryButton.textContent = state.multiplayer?.connected
+    ? multiplayer.getRole() === "host"
+      ? "重开房间"
+      : "等待房主重开"
+    : state.mode === "endless"
+      ? "从零开始"
+      : "重来本关";
   failurePanel.classList.remove("hidden");
 }
 
@@ -626,9 +706,15 @@ function frame(now) {
 
     if (!paused && !state.awaitingForcedShotgunNotice) {
       const audioBefore = captureAudioState(state);
+      const statusBefore = state.status;
       updateGame(state, input, pressed, dt);
+      if (statusBefore !== "gameover" && state.status === "gameover" && state.multiplayer?.connected && !state.multiplayer.killMessage) {
+        addKillReport(state, "僵尸", state.multiplayer.hostName ?? "房主");
+      }
       updateRemoteAvatar(state, remoteInputPacket, dt);
       updateRemoteShots(state, dt);
+      updateHostShotsAgainstRemote(state);
+      updateKillFeed(state, dt);
       sound.playFromStateChange(audioBefore, state);
       saveHighScore();
     }
@@ -653,17 +739,17 @@ document.querySelector("#balloonMode")?.addEventListener("click", () => start("b
 createDuelRoomButton?.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");
-  multiplayer.createRoom("duel");
+  multiplayer.createRoom("duel", getPlayerName());
 });
 createCoopRoomButton?.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");
-  multiplayer.createRoom("coop");
+  multiplayer.createRoom("coop", getPlayerName());
 });
 joinRoomButton?.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");
-  multiplayer.joinRoom(roomCodeInput?.value ?? "");
+  multiplayer.joinRoom(roomCodeInput?.value ?? "", getPlayerName());
 });
 rifleToggle.addEventListener("click", () => {
   sound.unlock();
@@ -748,6 +834,15 @@ retryButton.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");
   if (state) {
+    if (state.multiplayer?.connected) {
+      if (multiplayer.getRole() === "host") {
+        startMultiplayerHost(multiplayer.getMode());
+      } else if (multiplayerStatus) {
+        multiplayerStatus.textContent = "联机：请让房主点击重来。";
+      }
+      updatePanels();
+      return;
+    }
     restartChallenge(state);
     updatePanels();
   }

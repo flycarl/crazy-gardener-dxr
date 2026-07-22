@@ -695,10 +695,19 @@ function getSpawnX(state, index) {
 
 function spawnEnemyList(state, enemyTypes, startIndex = 0) {
   return enemyTypes.map((type, index) => {
-    const enemy = createEnemy(type, getSpawnX(state, startIndex + index), WORLD.groundY, state.cheats);
+    const enemy = applyMultiplayerEnemyBoost(state, createEnemy(type, getSpawnX(state, startIndex + index), WORLD.groundY, state.cheats));
     state.enemies.push(enemy);
     return enemy;
   });
+}
+
+function applyMultiplayerEnemyBoost(state, enemy) {
+  const boost = state?.multiplayer?.mode === "coop" ? (enemy.isBoss ? 1.4 : 1.55) : 1;
+  if (boost <= 1) return enemy;
+
+  enemy.maxHealth = Math.ceil(enemy.maxHealth * boost);
+  enemy.health = enemy.maxHealth;
+  return enemy;
 }
 
 function spawnBossAdds(state) {
@@ -740,7 +749,7 @@ function spawnPendingBoss(state) {
 
   const bosses = bossTypes.map((bossType, index) => {
     const bossX = getSpawnX(state, state.level + 3 + index);
-    return createEnemy(bossType, bossX, WORLD.groundY, state.cheats);
+    return applyMultiplayerEnemyBoost(state, createEnemy(bossType, bossX, WORLD.groundY, state.cheats));
   });
 
   state.enemies.push(...bosses);
@@ -1236,7 +1245,7 @@ function updateEndlessSpawns(state, dt) {
     }
 
     const bossType = state.pendingEndlessBossType ?? (state.wave % 40 === 0 ? "rangedBoss" : "tankBoss");
-    const boss = createEnemy(bossType, getSpawnX(state, state.wave + 5), WORLD.groundY, state.cheats);
+    const boss = applyMultiplayerEnemyBoost(state, createEnemy(bossType, getSpawnX(state, state.wave + 5), WORLD.groundY, state.cheats));
     state.enemies.push(boss);
     state.pendingEndlessBoss = false;
     state.pendingEndlessBossType = null;
