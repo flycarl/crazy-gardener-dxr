@@ -19,7 +19,14 @@
           <button id="levelMode" type="button">关卡模式</button>
           <button id="endlessMode" type="button">无尽模式</button>
           <button id="balloonMode" type="button">打气球模式：手枪</button>
+          <button id="createDuelRoom" type="button">创建对战房间</button>
+          <button id="createCoopRoom" type="button">创建双人无尽</button>
         </div>
+        <div class="multiplayer-menu">
+          <input id="roomCodeInput" type="text" autocomplete="off" placeholder="输入房间号">
+          <button id="joinRoomButton" type="button">加入房间</button>
+        </div>
+        <p id="multiplayerStatus" class="control-hint">联机：未连接</p>
         <p id="rifleModeHint" class="control-hint">单发伤害更高。连发伤害低一些，但速度更快。</p>
         <p class="control-hint">打气球模式：手枪模式，不受霰弹枪和步枪影响。</p>
       </section>
@@ -94,6 +101,7 @@
       </section>
       <section id="hud" class="hud" aria-live="polite"></section>
     </main>
+    <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
     <script type="module" src="src/main.js"></script>
   </body>
 </html>

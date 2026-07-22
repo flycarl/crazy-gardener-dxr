@@ -3,6 +3,7 @@ import { advanceToNextLevel, choosePostBossWeapon, configureBalloonLevel, config
 import { consumePressed, createInput } from "./input.js";
 import { captureAudioState, createSoundPlayer } from "./audio.js";
 import { drawGame } from "./render.js";
+import { createMultiplayerClient } from "./multiplayer.js";
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d");
@@ -29,6 +30,11 @@ const rifleToggle = document.querySelector("#rifleToggle");
 const rifleFireModeToggle = document.querySelector("#rifleFireModeToggle");
 const rifleModeHint = document.querySelector("#rifleModeHint");
 const levelModeButton = document.querySelector("#levelMode");
+const createDuelRoomButton = document.querySelector("#createDuelRoom");
+const createCoopRoomButton = document.querySelector("#createCoopRoom");
+const joinRoomButton = document.querySelector("#joinRoomButton");
+const roomCodeInput = document.querySelector("#roomCodeInput");
+const multiplayerStatus = document.querySelector("#multiplayerStatus");
 const cheatMenuButton = document.querySelector("#cheatMenuButton");
 const cheatPanel = document.querySelector("#cheatPanel");
 const cheatEnabled = document.querySelector("#cheatEnabled");
@@ -103,6 +109,31 @@ let selectedCheats = {
 let paused = false;
 let cheatAppliedSinceOpen = false;
 let cheatHealthSetSinceOpen = false;
+let remoteInputPacket = null;
+let snapshotTimer = 0;
+
+const multiplayer = createMultiplayerClient({
+  onStatus: (message) => {
+    if (multiplayerStatus) multiplayerStatus.textContent = `联机：${message}`;
+    if (roomCodeInput && message.startsWith("房间号：")) {
+      roomCodeInput.value = message.replace("房间号：", "");
+    }
+  },
+  onGuestInput: (packet) => {
+    remoteInputPacket = packet;
+  },
+  onSnapshot: (snapshot) => {
+    state = snapshot;
+    paused = false;
+    menu.classList.add("hidden");
+    pauseMenuButton.classList.remove("hidden");
+  },
+  onStart: ({ role, mode }) => {
+    if (role === "host") {
+      startMultiplayerHost(mode);
+    }
+  },
+});
 
 function getAimDirection(currentState) {
   const player = currentState.player;
@@ -139,6 +170,155 @@ function start(mode) {
   pauseMenuButton.classList.remove("hidden");
   pauseMenuButton.setAttribute("aria-expanded", "false");
   paused = false;
+}
+
+function applyCoopEnemyBoost(nextState) {
+  nextState.cheats = {
+    ...nextState.cheats,
+    enabled: true,
+    normalHealthMultiplier: Math.max(nextState.cheats.normalHealthMultiplier ?? 1, 1.55),
+    fastHealthMultiplier: Math.max(nextState.cheats.fastHealthMultiplier ?? 1, 1.55),
+    fatHealthMultiplier: Math.max(nextState.cheats.fatHealthMultiplier ?? 1, 1.55),
+    slimeLowHealthMultiplier: Math.max(nextState.cheats.slimeLowHealthMultiplier ?? 1, 1.55),
+    slimeMidHealthMultiplier: Math.max(nextState.cheats.slimeMidHealthMultiplier ?? 1, 1.55),
+    slimeHighHealthMultiplier: Math.max(nextState.cheats.slimeHighHealthMultiplier ?? 1, 1.55),
+    tankBossHealthMultiplier: Math.max(nextState.cheats.tankBossHealthMultiplier ?? 1, 1.4),
+    rangedBossHealthMultiplier: Math.max(nextState.cheats.rangedBossHealthMultiplier ?? 1, 1.4),
+  };
+}
+
+function startMultiplayerHost(mode) {
+  sound.unlock();
+  sound.play("ui");
+  const gameMode = mode === "coop" ? "endless" : "duel";
+  state = createGameState(gameMode === "duel" ? "level" : gameMode, selectedWeapon, selectedRifleMode);
+  state.mode = gameMode;
+  state.highScore = highScore;
+  state.cheats = { ...selectedCheats };
+  state.multiplayer = { role: "host", mode, connected: true };
+  state.remotePlayers = [
+    {
+      id: "guest",
+      x: state.player.x + 120,
+      y: state.player.y,
+      vx: 0,
+      vy: 0,
+      w: state.player.w,
+      h: state.player.h,
+      facing: -1,
+      health: state.player.maxHealth,
+      maxHealth: state.player.maxHealth,
+      shotCooldown: 0,
+      color: "#6ec6ff",
+    },
+  ];
+  state.remoteShots = [];
+
+  if (mode === "coop") {
+    applyCoopEnemyBoost(state);
+    configureEndlessMode(state);
+  } else {
+    state.enemies = [];
+    state.requiredKills = Infinity;
+    state.extraction.active = false;
+  }
+
+  menu.classList.add("hidden");
+  nextLevelPanel.classList.add("hidden");
+  failurePanel.classList.add("hidden");
+  pausePanel.classList.add("hidden");
+  cheatPanel.classList.add("hidden");
+  pauseMenuButton.classList.remove("hidden");
+  paused = false;
+}
+
+function updateRemoteAvatar(currentState, packet, dt) {
+  if (!currentState?.remotePlayers?.length || !packet?.input) return;
+  const avatar = currentState.remotePlayers[0];
+  const remote = packet.input;
+  const speed = 390;
+  avatar.vx = remote.left ? -speed : remote.right ? speed : 0;
+  avatar.facing = avatar.vx < 0 ? -1 : avatar.vx > 0 ? 1 : avatar.facing || 1;
+  avatar.shotCooldown = Math.max(0, (avatar.shotCooldown ?? 0) - dt);
+
+  if (remote.jumpPressed && avatar.onGround !== false) {
+    avatar.vy = -820;
+    avatar.onGround = false;
+  }
+
+  avatar.vy = Math.min(1300, (avatar.vy ?? 0) + 2200 * dt);
+  avatar.x = Math.max(0, Math.min(3600 - avatar.w, avatar.x + avatar.vx * dt));
+  avatar.y += avatar.vy * dt;
+  if (avatar.y + avatar.h >= 590) {
+    avatar.y = 590 - avatar.h;
+    avatar.vy = 0;
+    avatar.onGround = true;
+  }
+
+  if (remote.shootPressed && avatar.shotCooldown === 0) {
+    const centerX = avatar.x + avatar.w / 2;
+    const centerY = avatar.y + avatar.h / 2;
+    const dx = packet.aim?.x ?? avatar.facing;
+    const dy = packet.aim?.y ?? 0;
+    const length = Math.hypot(dx, dy) || 1;
+    currentState.remoteShots ??= [];
+    currentState.remoteShots.push({
+      x: centerX,
+      y: centerY,
+      vx: (dx / length) * 980,
+      vy: (dy / length) * 980,
+      life: 1.4,
+      w: 8,
+      h: 8,
+      damage: currentState.multiplayer?.mode === "coop" ? 14 : 10,
+    });
+    avatar.shotCooldown = 0.22;
+  }
+}
+
+function updateRemoteShots(currentState, dt) {
+  if (!currentState?.remoteShots?.length) return;
+  const remaining = [];
+
+  for (const shot of currentState.remoteShots) {
+    shot.x += shot.vx * dt;
+    shot.y += shot.vy * dt;
+    shot.life -= dt;
+    let keep = shot.life > 0 && shot.x >= 0 && shot.x <= 3600 && shot.y >= 0 && shot.y <= 720;
+
+    if (keep && currentState.multiplayer?.mode === "coop") {
+      const enemy = currentState.enemies.find((target) => target.health > 0 && shot.x >= target.x && shot.x <= target.x + target.w && shot.y >= target.y && shot.y <= target.y + target.h);
+      if (enemy) {
+        enemy.health = Math.max(0, enemy.health - shot.damage);
+        keep = false;
+      }
+    }
+
+    if (keep && currentState.multiplayer?.mode === "duel") {
+      const player = currentState.player;
+      if (shot.x >= player.x && shot.x <= player.x + player.w && shot.y >= player.y && shot.y <= player.y + player.h) {
+        player.health = Math.max(0, player.health - shot.damage);
+        if (player.health === 0) currentState.status = "gameover";
+        keep = false;
+      }
+    }
+
+    if (keep) remaining.push(shot);
+  }
+
+  currentState.remoteShots = remaining;
+}
+
+function captureGuestInput(pressed) {
+  return {
+    input: {
+      left: input.left,
+      right: input.right,
+      jumpPressed: pressed.jumpPressed,
+      shootPressed: pressed.shootPressed,
+    },
+    aim: input.aim,
+  };
 }
 
 function saveLevelProgress(level) {
@@ -376,6 +556,7 @@ function updatePanels() {
 function returnToMenu() {
   sound.play("ui");
   saveCurrentLevelProgress();
+  multiplayer.close();
   state = null;
   paused = false;
   menu.classList.remove("hidden");
@@ -435,12 +616,28 @@ function frame(now) {
     input.aim = getAimDirection(state);
 
     const pressed = consumePressed(input);
+    if (multiplayer.getRole() === "guest") {
+      multiplayer.sendGuestInput(captureGuestInput(pressed));
+      updatePanels();
+      drawGame(context, canvas, state, input);
+      requestAnimationFrame(frame);
+      return;
+    }
 
     if (!paused && !state.awaitingForcedShotgunNotice) {
       const audioBefore = captureAudioState(state);
       updateGame(state, input, pressed, dt);
+      updateRemoteAvatar(state, remoteInputPacket, dt);
+      updateRemoteShots(state, dt);
       sound.playFromStateChange(audioBefore, state);
       saveHighScore();
+    }
+    if (multiplayer.getRole() === "host") {
+      snapshotTimer += dt;
+      if (snapshotTimer >= 1 / 20) {
+        snapshotTimer = 0;
+        multiplayer.sendSnapshot(state);
+      }
     }
     updatePanels();
     sound.updateAmbient(state, paused);
@@ -453,6 +650,21 @@ function frame(now) {
 levelModeButton?.addEventListener("click", () => start("level"));
 document.querySelector("#endlessMode")?.addEventListener("click", () => start("endless"));
 document.querySelector("#balloonMode")?.addEventListener("click", () => start("balloon"));
+createDuelRoomButton?.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
+  multiplayer.createRoom("duel");
+});
+createCoopRoomButton?.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
+  multiplayer.createRoom("coop");
+});
+joinRoomButton?.addEventListener("click", () => {
+  sound.unlock();
+  sound.play("ui");
+  multiplayer.joinRoom(roomCodeInput?.value ?? "");
+});
 rifleToggle.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");

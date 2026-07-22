@@ -2479,6 +2479,24 @@ test("menu explains balloon mode uses pistol and ignores shotgun and rifle setti
   assert.match(html, /不受霰弹枪和步枪影响/);
 });
 
+test("page includes PeerJS multiplayer room controls", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+  const multiplayer = readFileSync(new URL("../src/multiplayer.js", import.meta.url), "utf8");
+  const render = readFileSync(new URL("../src/render.js", import.meta.url), "utf8");
+
+  assert.match(html, /peerjs/);
+  assert.match(html, /id="createDuelRoom"/);
+  assert.match(html, /id="createCoopRoom"/);
+  assert.match(html, /id="roomCodeInput"/);
+  assert.match(main, /createMultiplayerClient/);
+  assert.match(main, /startMultiplayerHost/);
+  assert.match(main, /sendSnapshot/);
+  assert.match(multiplayer, /createRoom/);
+  assert.match(multiplayer, /joinRoom/);
+  assert.match(render, /drawRemotePlayers/);
+});
+
 test("page includes an in-game pause menu with resume and main menu actions", () => {
   const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 

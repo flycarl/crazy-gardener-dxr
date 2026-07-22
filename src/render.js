@@ -676,6 +676,46 @@ function drawPlayer(context, state, input) {
   }
 }
 
+function drawRemotePlayers(context, state) {
+  for (const player of state.remotePlayers ?? []) {
+    const x = screenX(state, player.x);
+    const y = screenY(state, player.y);
+    const centerX = x + player.w / 2;
+
+    context.save();
+    context.lineJoin = "round";
+    context.lineCap = "round";
+    context.fillStyle = "rgba(18, 20, 16, 0.2)";
+    context.beginPath();
+    context.ellipse(centerX, y + player.h + 4, player.w * 0.46, 6, 0, 0, Math.PI * 2);
+    context.fill();
+    roundRect(context, x + 6, y + 25, player.w - 12, player.h - 28, 8, "#edf7ff", INK, 4);
+    roundRect(context, x + 10, y + 34, player.w - 20, player.h - 37, 6, player.color ?? "#6ec6ff", INK, 3);
+    ellipse(context, centerX, y + 20, player.w * 0.37, 18, 0.02, "#f4d0aa", INK, 4);
+    context.fillStyle = "#23547a";
+    context.font = "bold 13px Arial";
+    context.textAlign = "center";
+    context.fillText("队友", centerX, y - 10);
+
+    context.fillStyle = "rgba(0, 0, 0, 0.55)";
+    context.fillRect(x, y - 24, player.w, 6);
+    context.fillStyle = "#6ec6ff";
+    context.fillRect(x + 1, y - 23, Math.max(0, (player.w - 2) * (player.health / player.maxHealth)), 4);
+    context.restore();
+  }
+}
+
+function drawRemoteShots(context, state) {
+  context.save();
+  context.fillStyle = "#6ec6ff";
+  for (const shot of state.remoteShots ?? []) {
+    context.beginPath();
+    context.arc(screenX(state, shot.x), screenY(state, shot.y), 5, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
+}
+
 function formatPowerUps(activePowerUps, permanentPowerUps = {}) {
   const activeEntries = Object.entries(activePowerUps);
   const permanentEntries = Object.entries(permanentPowerUps);
@@ -736,7 +776,7 @@ function updateHud(state) {
   }
 
   const player = state.player;
-  const modeLabel = state.mode === "level" ? "关卡" : state.mode === "balloon" ? "打气球" : "无尽";
+  const modeLabel = state.mode === "level" ? "关卡" : state.mode === "balloon" ? "打气球" : state.mode === "duel" ? "联机对战" : "无尽";
   const weaponLabel = state.weapon === "rifle" ? "步枪" : state.weapon === "pistol" ? "手枪" : "霰弹枪";
   const progressLabel =
     state.status === "victory"
@@ -767,6 +807,10 @@ function updateHud(state) {
     "左键开枪",
     "右键挥枪托",
   ];
+
+  if (state.multiplayer?.connected) {
+    statusItems.splice(4, 0, state.multiplayer.mode === "coop" ? "联机：双人无尽，怪物加强" : "联机：互相战斗");
+  }
 
   if (state.mode === "level") {
     statusItems.splice(4, 0, state.awaitingNextLevel ? "通关：等待下一关" : `剩余怪物：${state.enemiesRemaining ?? state.enemies.length}`);
@@ -803,11 +847,13 @@ export function drawGame(context, canvas, state, input) {
   drawPickups(context, state);
   drawPellets(context, state);
   drawEnemyProjectiles(context, state);
+  drawRemoteShots(context, state);
   drawEffects(context, state);
   drawCorpses(context, state);
   drawEnemies(context, state);
   drawStockArc(context, state);
   drawPlayer(context, state, input);
+  drawRemotePlayers(context, state);
   drawFloatTexts(context, state);
   drawBossBar(context, canvas, state);
   updateHud(state);
