@@ -21,6 +21,7 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
   let connection = null;
   let role = "solo";
   let mode = null;
+  let currentRoomCode = null;
   let localName = "玩家";
   let remoteName = "玩家";
 
@@ -87,13 +88,14 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
     remoteName = "玩家2";
     const roomCode = makeRoomCode();
     const roomId = roomCodeToPeerId(roomCode);
+    currentRoomCode = roomCode;
     setStatus("正在创建房间...");
     const nextPeer = ensurePeer(roomId);
     if (!nextPeer) return null;
 
     nextPeer.on("open", () => {
       onRoomCode?.(roomCode);
-      setStatus(`房间号：${roomCode}，等待玩家加入。`);
+      setStatus(`你已在房间 ${roomCode}，把房间号发给朋友，等待玩家加入。`);
     });
     nextPeer.on("connection", (conn) => {
       wireConnection(conn);
@@ -108,9 +110,14 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
       setStatus("请输入4位房间号。");
       return false;
     }
+    if (role === "host" && currentRoomCode === cleanRoomCode) {
+      setStatus(`你已经在房间 ${cleanRoomCode} 里了，把房间号发给朋友就行。`);
+      return true;
+    }
 
     role = "guest";
     mode = null;
+    currentRoomCode = cleanRoomCode;
     localName = name || "玩家2";
     remoteName = "房主";
     setStatus("正在加入房间...");
@@ -153,6 +160,7 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
     peer = null;
     role = "solo";
     mode = null;
+    currentRoomCode = null;
     localName = "玩家";
     remoteName = "玩家";
     setStatus("联机已关闭。");
