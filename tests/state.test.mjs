@@ -2506,6 +2506,9 @@ test("page includes PeerJS multiplayer room controls", () => {
   assert.match(multiplayer, /dxr-room/);
   assert.match(multiplayer, /你已经在房间/);
   assert.match(multiplayer, /把房间号发给朋友/);
+  assert.match(multiplayer, /JOIN_TIMEOUT_MS/);
+  assert.match(multiplayer, /正在寻找房主/);
+  assert.match(multiplayer, /加入房间 .* 超时/);
   assert.match(multiplayer, /guest-ready/);
   assert.match(multiplayer, /hostName/);
   assert.match(render, /drawRemotePlayers/);
