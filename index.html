@@ -19,8 +19,8 @@
           <button id="levelMode" type="button">关卡模式</button>
           <button id="endlessMode" type="button">无尽模式</button>
           <button id="balloonMode" type="button">打气球模式：手枪</button>
-          <button id="createDuelRoom" type="button">创建对战房间</button>
-          <button id="createCoopRoom" type="button">创建双人无尽</button>
+          <button id="createDuelRoom" type="button">创建局域网对战</button>
+          <button id="createCoopRoom" type="button">创建局域网双人无尽</button>
         </div>
         <div class="multiplayer-menu">
           <input id="playerNameInput" type="text" autocomplete="name" maxlength="14" placeholder="你的名字">
@@ -48,6 +48,13 @@
         <div class="failure-actions">
           <button id="retryButton" type="button">重来</button>
           <button id="mainMenuButton" type="button">主菜单</button>
+        </div>
+      </section>
+      <section id="multiplayerWaitingPanel" class="next-level-panel hidden">
+        <div class="failure-title">正在等待朋友加入</div>
+        <p id="multiplayerWaitingText" class="control-hint">房间号：</p>
+        <div class="failure-actions">
+          <button id="multiplayerWaitingMenuButton" type="button">主菜单</button>
         </div>
       </section>
       <button id="pauseMenuButton" class="pause-menu-button hidden" type="button" aria-expanded="false">菜单</button>

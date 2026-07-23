@@ -55,7 +55,6 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
       if (role === "guest") {
         connection.send({ type: "guest-ready", name: localName });
       }
-      if (role === "host") onStart?.({ role, mode });
     });
     connection.on("data", (packet) => {
       if (packet?.type === "guest-ready" && role === "host") {
@@ -95,7 +94,8 @@ export function createMultiplayerClient({ onStatus, onRoomCode, onGuestInput, on
 
     nextPeer.on("open", () => {
       onRoomCode?.(roomCode);
-      setStatus(`你已在房间 ${roomCode}，把房间号发给朋友，等待玩家加入。`);
+      setStatus(`你已进入局域网房间 ${roomCode}，正在等待朋友加入。`);
+      onStart?.({ role, mode, roomCode, waitingForGuest: true });
     });
     nextPeer.on("connection", (conn) => {
       wireConnection(conn);

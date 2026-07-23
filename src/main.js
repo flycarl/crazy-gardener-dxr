@@ -21,6 +21,9 @@ const failurePanel = document.querySelector("#failurePanel");
 const failureTitle = document.querySelector(".failure-title");
 const retryButton = document.querySelector("#retryButton");
 const mainMenuButton = document.querySelector("#mainMenuButton");
+const multiplayerWaitingPanel = document.querySelector("#multiplayerWaitingPanel");
+const multiplayerWaitingText = document.querySelector("#multiplayerWaitingText");
+const multiplayerWaitingMenuButton = document.querySelector("#multiplayerWaitingMenuButton");
 const pauseMenuButton = document.querySelector("#pauseMenuButton");
 const pausePanel = document.querySelector("#pausePanel");
 const resumeButton = document.querySelector("#resumeButton");
@@ -131,9 +134,9 @@ const multiplayer = createMultiplayerClient({
     menu.classList.add("hidden");
     pauseMenuButton.classList.remove("hidden");
   },
-  onStart: ({ role, mode }) => {
+  onStart: ({ role, mode, roomCode, waitingForGuest }) => {
     if (role === "host") {
-      startMultiplayerHost(mode);
+      startMultiplayerHost(mode, { roomCode, waitingForGuest });
     }
   },
   onPeerName: ({ localName, remoteName }) => {
@@ -141,6 +144,7 @@ const multiplayer = createMultiplayerClient({
     if (state.multiplayer.role === "host") {
       state.multiplayer.hostName = localName;
       state.multiplayer.guestName = remoteName;
+      state.multiplayer.waitingForGuest = false;
       if (state.remotePlayers?.[0]) state.remotePlayers[0].name = remoteName;
     } else {
       state.multiplayer.hostName = remoteName;
@@ -197,7 +201,7 @@ function start(mode) {
   paused = false;
 }
 
-function startMultiplayerHost(mode) {
+function startMultiplayerHost(mode, options = {}) {
   sound.unlock();
   sound.play("ui");
   const hostName = getPlayerName();
@@ -207,7 +211,15 @@ function startMultiplayerHost(mode) {
   state.mode = gameMode;
   state.highScore = highScore;
   state.cheats = { ...selectedCheats, enabled: false, invincible: false, infiniteAmmo: false };
-  state.multiplayer = { role: "host", mode, connected: true, hostName, guestName: previousGuestName };
+  state.multiplayer = {
+    role: "host",
+    mode,
+    connected: true,
+    hostName,
+    guestName: previousGuestName,
+    roomCode: options.roomCode ?? state?.multiplayer?.roomCode ?? "",
+    waitingForGuest: Boolean(options.waitingForGuest),
+  };
   state.killFeed = [];
   state.remotePlayers = [
     {
@@ -239,9 +251,10 @@ function startMultiplayerHost(mode) {
   menu.classList.add("hidden");
   nextLevelPanel.classList.add("hidden");
   failurePanel.classList.add("hidden");
+  multiplayerWaitingPanel?.classList.toggle("hidden", !state.multiplayer.waitingForGuest);
   pausePanel.classList.add("hidden");
   cheatPanel.classList.add("hidden");
-  pauseMenuButton.classList.remove("hidden");
+  pauseMenuButton.classList.toggle("hidden", state.multiplayer.waitingForGuest);
   paused = false;
 }
 
@@ -625,7 +638,15 @@ function updateFailurePanel() {
 function updatePanels() {
   updateNextLevelPanel();
   updateFailurePanel();
-  pauseMenuButton.classList.toggle("hidden", !state || state.status === "gameover" || state.status === "victory");
+  if (state?.multiplayer?.waitingForGuest) {
+    if (multiplayerWaitingText) {
+      multiplayerWaitingText.textContent = `房间号：${state.multiplayer.roomCode || "----"}，把它发给朋友；朋友加入后自动开始。`;
+    }
+    multiplayerWaitingPanel?.classList.remove("hidden");
+  } else {
+    multiplayerWaitingPanel?.classList.add("hidden");
+  }
+  pauseMenuButton.classList.toggle("hidden", !state || state.status === "gameover" || state.status === "victory" || state.multiplayer?.waitingForGuest);
   if (!state || state.status === "gameover" || state.status === "victory" || state.awaitingNextLevel || state.awaitingWeaponChoice || state.awaitingForcedShotgunNotice) {
     paused = false;
     pausePanel.classList.add("hidden");
@@ -646,6 +667,7 @@ function returnToMenu() {
   postBossRifleModeChoices.classList.add("hidden");
   delete postBossRifleModeChoices.dataset.choosing;
   failurePanel.classList.add("hidden");
+  multiplayerWaitingPanel?.classList.add("hidden");
   pausePanel.classList.add("hidden");
   cheatPanel.classList.add("hidden");
   pauseMenuButton.classList.add("hidden");
@@ -704,7 +726,7 @@ function frame(now) {
       return;
     }
 
-    if (!paused && !state.awaitingForcedShotgunNotice) {
+    if (!paused && !state.awaitingForcedShotgunNotice && !state.multiplayer?.waitingForGuest) {
       const audioBefore = captureAudioState(state);
       const statusBefore = state.status;
       updateGame(state, input, pressed, dt);
@@ -751,6 +773,7 @@ joinRoomButton?.addEventListener("click", () => {
   sound.play("ui");
   multiplayer.joinRoom(roomCodeInput?.value ?? "", getPlayerName());
 });
+multiplayerWaitingMenuButton?.addEventListener("click", returnToMenu);
 rifleToggle.addEventListener("click", () => {
   sound.unlock();
   sound.play("ui");

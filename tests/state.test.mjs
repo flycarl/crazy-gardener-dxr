@@ -2490,11 +2490,14 @@ test("page includes PeerJS multiplayer room controls", () => {
   assert.match(html, /id="createCoopRoom"/);
   assert.match(html, /id="playerNameInput"/);
   assert.match(html, /id="roomCodeInput"/);
+  assert.match(html, /id="multiplayerWaitingPanel"/);
+  assert.match(html, /正在等待朋友加入/);
   assert.match(html, /输入4位房间号/);
   assert.match(main, /createMultiplayerClient/);
   assert.match(main, /startMultiplayerHost/);
   assert.match(main, /sendSnapshot/);
   assert.match(main, /联机模式不能开作弊/);
+  assert.match(main, /waitingForGuest/);
   assert.match(main, /killMessage/);
   assert.match(main, /killFeed/);
   assert.match(multiplayer, /createRoom/);
