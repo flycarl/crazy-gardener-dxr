@@ -4,6 +4,7 @@ import { consumePressed, createInput } from "./input.js";
 import { captureAudioState, createSoundPlayer } from "./audio.js";
 import { drawGame } from "./render.js";
 import { createMultiplayerClient } from "./multiplayer.js";
+import { WORLD } from "./core/constants.js";
 
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d");
@@ -146,6 +147,7 @@ const multiplayer = createMultiplayerClient({
       state.multiplayer.guestName = remoteName;
       state.multiplayer.waitingForGuest = false;
       if (state.remotePlayers?.[0]) state.remotePlayers[0].name = remoteName;
+      multiplayer.sendSnapshot(state);
     } else {
       state.multiplayer.hostName = remoteName;
       state.multiplayer.guestName = localName;
@@ -221,11 +223,12 @@ function startMultiplayerHost(mode, options = {}) {
     waitingForGuest: Boolean(options.waitingForGuest),
   };
   state.killFeed = [];
+  applyMultiplayerSpawns(state, mode);
   state.remotePlayers = [
     {
       id: "guest",
       name: previousGuestName,
-      x: state.player.x + 120,
+      x: state.multiplayer.guestSpawnX,
       y: state.player.y,
       vx: 0,
       vy: 0,
@@ -256,6 +259,29 @@ function startMultiplayerHost(mode, options = {}) {
   cheatPanel.classList.add("hidden");
   pauseMenuButton.classList.toggle("hidden", state.multiplayer.waitingForGuest);
   paused = false;
+}
+
+function applyMultiplayerSpawns(nextState, mode) {
+  const player = nextState.player;
+  const guestGap = 92;
+  if (mode === "duel") {
+    player.x = 170;
+    player.y = WORLD.groundY - player.h;
+    player.vx = 0;
+    player.vy = 0;
+    player.facing = 1;
+    nextState.multiplayer.guestSpawnX = WORLD.width - player.w - 170;
+    nextState.multiplayer.guestSpawnMode = "opposite";
+    return;
+  }
+
+  player.x = 170;
+  player.y = WORLD.groundY - player.h;
+  player.vx = 0;
+  player.vy = 0;
+  player.facing = 1;
+  nextState.multiplayer.guestSpawnX = player.x + player.w + guestGap;
+  nextState.multiplayer.guestSpawnMode = "together";
 }
 
 function addKillReport(currentState, killerName, victimName) {

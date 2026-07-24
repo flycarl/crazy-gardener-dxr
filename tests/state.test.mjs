@@ -2496,6 +2496,9 @@ test("page includes PeerJS multiplayer room controls", () => {
   assert.match(main, /createMultiplayerClient/);
   assert.match(main, /startMultiplayerHost/);
   assert.match(main, /sendSnapshot/);
+  assert.match(main, /applyMultiplayerSpawns/);
+  assert.match(main, /guestSpawnMode = "opposite"/);
+  assert.match(main, /guestSpawnMode = "together"/);
   assert.match(main, /联机模式不能开作弊/);
   assert.match(main, /waitingForGuest/);
   assert.match(main, /killMessage/);
